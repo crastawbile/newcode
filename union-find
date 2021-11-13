@@ -1,0 +1,308 @@
+<?PHP
+//新しいコードを試してみる場所。
+
+
+//union-find木のテスト。グループ分けがどれほどのものか試してみよう。
+
+//まずは、ランダムにグループ分け対象を作る。
+//0から$lnまでの要素を、$tn個のクエリに従ってグループ分け、その後、$cn個の判定を行う。
+//あー、百万も入れた配列を作ると、その時点でメモリオーバーか。そりゃそうか。
+//均等にはならないけど、数が多ければ大丈夫だろうってことで毎回生成するか。
+//あー、時間計測処理ミスってて、初期時間からカウントしてたんか。そりゃ後の方が時間かかるわけだ。
+//シンプルカウントがやたら遅いということはよくわかった。ので、シンプルカウントを外して他で比較してみる。
+//一万、一千万、一千万で、
+//randのみ：1.150秒
+//自前：2.123秒+1.462秒
+//関数：3.907秒+3.220秒
+//クラス：5.298秒+5.219秒
+//union-find遅すぎないか……？メモの分のメモリ消費ないとは言え。
+//メモ式だと$ln百万程度が限界か―。とはいえ、その範囲だと倍以上速いってのは大したもんよ。
+//お、関数式のufSameに、$d1_p自体が等しければufRoot起動せずにtrue返すようにしたら、比較がやたら早くなった。
+//一万、一千万、一千万で、
+//randのみ：1.144秒
+//自前：2.104秒+1.445秒
+//関数：4.458秒+1.174秒
+//クラス：5.330秒+5.428秒
+//この分だと、いったん$otarに代入する分の時間が無駄とかそういう話か。
+//毎回$otar経由させてみたら、1.7秒ほどになった。余計な変数挟むのは当然遅くなるんだな。
+//とはいえ、一千万回繰り返して0.5秒ほどなら、別にいいか……？
+//いや、ループの中で、多重配列のキーに多重配列の値を使うようなのをフルで記述するのが面倒で
+//otnに入れることあるけど、あれ下手すると1秒遅くなるんだな……。控えよう。
+//最終的に自前でクラス化。
+//一万、一千万、一千万で、
+//randのみ：1.135秒
+//自前：2.110秒+1.443秒
+//関数：3.936秒+1.699秒
+//クラス：4.331秒+1.873秒
+//クラス化されてる分遅くはなるが、まあ許容範囲内か。
+
+$ln=10000;
+$tn=10000000;
+$cn=10000000;
+
+set_time_limit(0);
+
+$newchecktime=substr(str_pad(hrtime()[0],9,"0",STR_PAD_LEFT).".".str_pad(hrtime()[1],9,"0",STR_PAD_LEFT),4,9);
+if(isset($beforechecktime)){$echo=round($newchecktime-$beforechecktime,3);echo "$echo<br>\n";}
+$beforechecktime=$newchecktime;
+
+//比較検証用の、rand関数だけ規定回数行う処理。
+for($i1=0;$i1<$tn;$i1++){
+	$otar=array(rand(0,$ln),rand(0,$ln));
+}
+$newchecktime=substr(str_pad(hrtime()[0],9,"0",STR_PAD_LEFT).".".str_pad(hrtime()[1],9,"0",STR_PAD_LEFT),4,9);
+if(isset($beforechecktime)){$echo=round($newchecktime-$beforechecktime,3);echo "$echo<br>\n";}
+$beforechecktime=$newchecktime;
+
+$d1_p=range(0,$ln);
+
+$newchecktime=substr(str_pad(hrtime()[0],9,"0",STR_PAD_LEFT).".".str_pad(hrtime()[1],9,"0",STR_PAD_LEFT),4,9);
+if(isset($beforechecktime)){$echo=round($newchecktime-$beforechecktime,3);echo "$echo<br>\n";}
+$beforechecktime=$newchecktime;
+
+echo"<br>\n";
+
+/*
+//とりあえず、シンプルに、0から$lnまでのキーを持った配列に、グループ番号を振っていくシステム。
+//別グループだった場合は、大きい方のグループ番号を全て小さい方のグループ番号に変更する。
+$d1_g=array_fill(0,$ln+1,0);
+$gn=1;//次の新規グループに与えるグループ番号
+for($i1=0;$i1<$tn;$i1++){
+	//echo "check $i1 \n";
+	//print_r($d1_g);echo"\n";
+	$otar=array(rand(0,$ln),rand(0,$ln));
+	//echo "$otar[0] $otar[1] \n";
+	if($otar[0]==$otar[1]){continue;}
+
+	if($d1_g[$otar[0]]==0 and $d1_g[$otar[1]]==0){
+		$d1_g[$otar[0]]=$gn;
+		$d1_g[$otar[1]]=$gn;
+		$gn++;
+	}
+	elseif($d1_g[$otar[0]]==0){
+		$d1_g[$otar[0]]=$d1_g[$otar[1]];
+	}
+	elseif($d1_g[$otar[1]]==0){
+		$d1_g[$otar[1]]=$d1_g[$otar[0]];
+	}
+	else{
+		$otn0=$d1_g[$otar[0]];
+		$otn1=$d1_g[$otar[1]];
+		for($i2=0;$i2<=$ln;$i2++){
+			if($d1_g[$i2]==$otn1){
+				$d1_g[$i2]=$otn0;
+			}
+		}
+	}
+}
+$newchecktime=substr(str_pad(hrtime()[0],9,"0",STR_PAD_LEFT).".".str_pad(hrtime()[1],9,"0",STR_PAD_LEFT),4,9);
+if(isset($beforechecktime)){$echo=round($newchecktime-$beforechecktime,3);echo "$echo<br>\n";}
+$beforechecktime=$newchecktime;
+
+for($i1=0;$i1<$cn;$i1++){
+	$otar=array(rand(0,$ln),rand(0,$ln));
+	if($d1_g[$otar[0]]==$d1_g[$otar[1]]){$an="yes";}
+	else{$an="no";}
+}
+$newchecktime=substr(str_pad(hrtime()[0],9,"0",STR_PAD_LEFT).".".str_pad(hrtime()[1],9,"0",STR_PAD_LEFT),4,9);
+if(isset($beforechecktime)){$echo=round($newchecktime-$beforechecktime,3);echo "$echo<br>\n";}
+$beforechecktime=$newchecktime;
+*/
+
+//続いて、自分が普段やるであろう実装。グループ番号配列と、グループごとのメンバーメモ配列を作って、
+//塗り替えを早くする。→あっさりとメモリオーバー。
+//いやまて、高々$ln=100程度で溢れるのはおかしい。バグってんな？
+//→メモの書き込み位置がおかしかったのと、unset忘れてたのを修正。
+$d1_g=array_fill(0,$ln+1,0);
+$d2_m=array();
+$gn=1;//次の新規グループに与えるグループ番号
+for($i1=0;$i1<$tn;$i1++){
+	//echo "check $i1 \n";
+	//print_r($d1_g);echo"\n";
+	//print_r($d2_m);echo"\n";
+
+	$otar=array(rand(0,$ln),rand(0,$ln));
+	//echo "$otar[0] $otar[1] \n";
+
+	if($d1_g[$otar[0]]==0 and $d1_g[$otar[1]]==0){
+		$d1_g[$otar[0]]=$gn;
+		$d1_g[$otar[1]]=$gn;
+		$d2_m[$gn]=array($otar[0],$otar[1]);
+		$gn++;
+	}
+	elseif($d1_g[$otar[0]]==0){
+		$d1_g[$otar[0]]=$d1_g[$otar[1]];
+		$d2_m[$d1_g[$otar[1]]][]=$otar[0];
+	}
+	elseif($d1_g[$otar[1]]==0){
+		$d1_g[$otar[1]]=$d1_g[$otar[0]];
+		$d2_m[$d1_g[$otar[0]]][]=$otar[1];
+	}
+	else{
+		$otn0=$d1_g[$otar[0]];
+		$otn1=$d1_g[$otar[1]];
+		if($otn0==$otn1){continue;}//元々同じグループなら何もせず終了、の処理が抜けていた。
+
+		if(count($d2_m[$otn0])<count($d2_m[$otn1])){
+			$otln=$otn0;$othn=$otn1;
+		}
+		else{$otln=$otn1;$othn=$otn0;}
+
+		foreach($d2_m[$otln] as $fen){
+			$d1_g[$fen]=$othn;
+			$d2_m[$othn][]=$fen;
+		}
+		unset($d2_m[$otln]);
+
+	}
+}
+$newchecktime=substr(str_pad(hrtime()[0],9,"0",STR_PAD_LEFT).".".str_pad(hrtime()[1],9,"0",STR_PAD_LEFT),4,9);
+if(isset($beforechecktime)){$echo=round($newchecktime-$beforechecktime,3);echo "$echo<br>\n";}
+$beforechecktime=$newchecktime;
+
+for($i1=0;$i1<$cn;$i1++){
+	$otar=array(rand(0,$ln),rand(0,$ln));
+	if($d1_g[$otar[0]]==$d1_g[$otar[1]]){$an="yes";}
+	else{$an="no";}
+}
+$newchecktime=substr(str_pad(hrtime()[0],9,"0",STR_PAD_LEFT).".".str_pad(hrtime()[1],9,"0",STR_PAD_LEFT),4,9);
+if(isset($beforechecktime)){$echo=round($newchecktime-$beforechecktime,3);echo "$echo<br>\n";}
+$beforechecktime=$newchecktime;
+
+
+//最後に、union-find木の方法。
+$d1_p=range(0,$ln);
+$d1_r=array_fill(0,$ln+1,0);
+
+function ufRoot($tn){
+	global $d1_p;
+
+	if($d1_p[$tn]==$tn){
+		return $tn;
+	}
+	else{
+		$d1_p[$tn]=ufRoot($d1_p[$tn]);
+		return $d1_p[$tn];
+	}
+}
+
+function ufSame($tn1,$tn2){
+	global $d1_p;
+	if($d1_p[$tn1]==$d1_p[$tn2]){return true;}
+	return ufRoot($tn1)==ufRoot($tn2);
+}
+
+function ufUnite($tn1,$tn2){
+	global $d1_p;
+	global $d1_r;
+	$rn1=ufRoot($tn1);
+	$rn2=ufRoot($tn2);
+	if($rn1==$rn2){return;}
+
+	if($d1_r[$rn1]<$d1_r[$rn2]){
+		$d1_p[$rn1]=$rn2;
+	}
+	else{
+		$d1_p[$rn2]=$rn1;
+		if($d1_r[$rn1]==$d1_r[$rn2]){
+			$d1_r[$rn1]++;
+		}
+	}
+
+}
+
+for($i1=0;$i1<$tn;$i1++){
+
+	$otar=array(rand(0,$ln),rand(0,$ln));
+	//echo "check $i1 \n";
+	//echo "$otar[0] $otar[1] \n";
+
+	ufUnite($otar[0],$otar[1]);
+
+	//print_r($d1_p);echo"\n";
+	//print_r($d1_r);echo"\n";
+}
+$newchecktime=substr(str_pad(hrtime()[0],9,"0",STR_PAD_LEFT).".".str_pad(hrtime()[1],9,"0",STR_PAD_LEFT),4,9);
+if(isset($beforechecktime)){$echo=round($newchecktime-$beforechecktime,3);echo "$echo<br>\n";}
+$beforechecktime=$newchecktime;
+
+for($i1=0;$i1<$cn;$i1++){
+	$otar=array(rand(0,$ln),rand(0,$ln));
+	ufSame($otar[0],$otar[1]);
+}
+$newchecktime=substr(str_pad(hrtime()[0],9,"0",STR_PAD_LEFT).".".str_pad(hrtime()[1],9,"0",STR_PAD_LEFT),4,9);
+if(isset($beforechecktime)){$echo=round($newchecktime-$beforechecktime,3);echo "$echo<br>\n";}
+$beforechecktime=$newchecktime;
+/*
+*/
+//クラス化してみる。
+class ufTree{
+	private $d1_p;//接続先一覧
+	private $d1_r;//ランク一覧
+
+	function __construct($something){
+		if(is_int($something)){
+			$this->d1_p=range(0,$something);
+			$this->d1_r=array_fill(0,$something+1,0);
+		}
+		elseif(is_array($something)){
+			foreach($something as $fen){
+				$this->d1_p[$fen]=$fen;
+				$this->d1_r[$fen]=0;
+			}
+		}
+	}
+
+	public function findRoot($tn){
+		if($this->d1_p[$tn]==$tn){
+			return $tn;
+		}
+		else{
+			$this->d1_p[$tn]=$this->findRoot($this->d1_p[$tn]);
+			return $this->d1_p[$tn];
+		}
+	}
+	public function isSame($tn1,$tn2){
+		if($this->d1_p[$tn1]==$this->d1_p[$tn2]){return true;}
+		return $this->findRoot($tn1)==$this->findRoot($tn2);
+	}
+
+	function unite($tn1,$tn2){
+		$rn1=$this->findRoot($tn1);
+		$rn2=$this->findRoot($tn2);
+		if($rn1==$rn2){return;}
+
+		if($this->d1_r[$rn1]<$this->d1_r[$rn2]){
+			$this->d1_p[$rn1]=$rn2;
+		}
+		else{
+			$this->d1_p[$rn2]=$rn1;
+			if($this->d1_r[$rn1]==$this->d1_r[$rn2]){
+				$this->d1_r[$rn1]++;
+			}
+		}
+
+	}
+}
+
+
+$tree= new ufTree($ln+1);
+
+for($i1=0;$i1<$tn;$i1++){
+	$otar=array(rand(0,$ln),rand(0,$ln));
+	$tree->unite($otar[0],$otar[1]);
+}
+$newchecktime=substr(str_pad(hrtime()[0],9,"0",STR_PAD_LEFT).".".str_pad(hrtime()[1],9,"0",STR_PAD_LEFT),4,9);
+if(isset($beforechecktime)){$echo=round($newchecktime-$beforechecktime,3);echo "$echo<br>\n";}
+$beforechecktime=$newchecktime;
+
+for($i1=0;$i1<$cn;$i1++){
+	$otar=array(rand(0,$ln),rand(0,$ln));
+	$tree->isSame($otar[0],$otar[1]);
+}
+$newchecktime=substr(str_pad(hrtime()[0],9,"0",STR_PAD_LEFT).".".str_pad(hrtime()[1],9,"0",STR_PAD_LEFT),4,9);
+if(isset($beforechecktime)){$echo=round($newchecktime-$beforechecktime,3);echo "$echo<br>\n";}
+$beforechecktime=$newchecktime;
+
+
+?>
