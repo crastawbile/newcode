@@ -171,41 +171,41 @@ $beforechecktime=$newchecktime;
 
 
 //最後に、union-find木の方法。
-$d1_p=range(0,$ln);
-$d1_r=array_fill(0,$ln+1,0);
+$d1_uf_p=range(0,$ln);
+$d1_uf_r=array_fill(0,$ln+1,0);
 
 function ufRoot($tn){
-	global $d1_p;
+	global $d1_uf_p;
 
-	if($d1_p[$tn]==$tn){
+	if($d1_uf_p[$tn]==$tn){
 		return $tn;
 	}
 	else{
-		$d1_p[$tn]=ufRoot($d1_p[$tn]);
-		return $d1_p[$tn];
+		$d1_uf_p[$tn]=ufRoot($d1_uf_p[$tn]);
+		return $d1_uf_p[$tn];
 	}
 }
 
 function ufSame($tn1,$tn2){
-	global $d1_p;
-	if($d1_p[$tn1]==$d1_p[$tn2]){return true;}
+	global $d1_uf_p;
+	if($d1_uf_p[$tn1]==$d1_uf_p[$tn2]){return true;}
 	return ufRoot($tn1)==ufRoot($tn2);
 }
 
 function ufUnite($tn1,$tn2){
-	global $d1_p;
-	global $d1_r;
+	global $d1_uf_p;
+	global $d1_uf_r;
 	$rn1=ufRoot($tn1);
 	$rn2=ufRoot($tn2);
 	if($rn1==$rn2){return;}
 
-	if($d1_r[$rn1]<$d1_r[$rn2]){
-		$d1_p[$rn1]=$rn2;
+	if($d1_uf_r[$rn1]<$d1_uf_r[$rn2]){
+		$d1_uf_p[$rn1]=$rn2;
 	}
 	else{
-		$d1_p[$rn2]=$rn1;
-		if($d1_r[$rn1]==$d1_r[$rn2]){
-			$d1_r[$rn1]++;
+		$d1_uf_p[$rn2]=$rn1;
+		if($d1_uf_r[$rn1]==$d1_uf_r[$rn2]){
+			$d1_uf_r[$rn1]++;
 		}
 	}
 
