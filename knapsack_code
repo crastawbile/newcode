@@ -1,20 +1,25 @@
 namespace crast{
     class knapsack{//コスト辺り価値で昇順に並べて、残りコストで有効最大番号のコスト比でも暫定最大値に届かないなら打ち切り、で探索を早める
-        protected $d2_b;//(コスト,価値)の配列
-        protected $cn_b;//count($d2_b)
-        protected $d2_m;//有効最大リスト番号=>残りコスト=>最大価値のメモ配列
-        protected $maxCost;//指定された最大コスト条件
+        protected $d2_b;
+        protected $cn_b;
+        protected $d2_m;
+        protected $maxCost;
         protected $z_max;//暫定最大値
+        protected $sumCost;//コスト合計
+        protected $sumValue;//価値合計
         protected $some_small;//浮動小数点誤差は怖いので、比較時に下駄を履かせておく分。
     
         public function __construct($d2_b,$maxCost){
+            $this->sumCost=0;
+            $this->sumValue=0;
             foreach($d2_b as $d1_fe){
                 $d1_fe[2]=$d1_fe[1]/$d1_fe[0];
+                $this->sumCost+=$d1_fe[0];
+                $this->sumValue+=$d1_fe[1];
                 $this->insert($d1_fe);
                 $this->cn_b++;
-            }
+                }
             $this->maxCost=$maxCost;
-            $this->some_small=0.00001;
         }
         protected function insert($d1_t){
             if($this->cn_b==0){$this->d2_b=array($d1_t);return;}//今回が一つ目の場合
@@ -32,6 +37,7 @@ namespace crast{
                 }
             }
         }   
+    
         public function getReturn(){
             $this->d2_m=array_fill(0,count($this->d2_b),array());
             $this->z_max=0;
@@ -41,17 +47,21 @@ namespace crast{
                 $this->z_max+=$this->d2_b[$i1][1];
                 $lastCost-=$this->d2_b[$i1][0];
             }
-            return $this->do_rp(count($this->d2_b)-1,$this->maxCost,0);
+            return $this->do_rp(count($this->d2_b)-1,$this->maxCost,0,$this->sumCost,$this->sumValue);
         }
-        protected function do_rp($ln,$cn,$vn){
+        protected function do_rp($ln,$cn,$vn,$rc,$rv){//最大有効リスト番号、残りコスト、現在価値、有効リスト合計コスト、有効リスト合計価値
             if(array_key_exists($cn,$this->d2_m[$ln])){return $this->d2_m[$ln][$cn];}
             if($cn<=0){$this->d2_m[$ln][$cn]=0;return 0;}
             if(($this->z_max-$vn)/$cn>$this->d2_b[$ln][2]+$this->some_small){$this->d2_m[$ln][$cn]=0;return 0;}
+            if(($this->z_max-$vn)>$rv){$this->d2_m[$ln][$cn]=0;return 0;}
+            if($cn>=$rc){$this->d2_m[$ln][$cn]=$rv;return $rv;}
             if($ln==0){$this->d2_m[$ln][$cn]=0;return 0;}
     
-            $rtn=$this->do_rp($ln-1,$cn,$vn);
+            $rc-=$this->d2_b[$ln][0];
+            $rv-=$this->d2_b[$ln][1];
+            $rtn=$this->do_rp($ln-1,$cn,$vn,$rc,$rv);
             if($this->d2_b[$ln][0]<=$cn){
-                $rtn2=$this->do_rp($ln-1,$cn-$this->d2_b[$ln][0],$vn+$this->d2_b[$ln][1]);
+                $rtn2=$this->do_rp($ln-1,$cn-$this->d2_b[$ln][0],$vn+$this->d2_b[$ln][1],$rc,$rv);
                 $rtn=max($rtn,$rtn2+$this->d2_b[$ln][1]);
             }
             $this->d2_m[$ln][$cn]=$rtn;
