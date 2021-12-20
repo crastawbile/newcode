@@ -37,7 +37,6 @@ namespace crast{
                 }
             }
         }   
-    
         public function getReturn(){
             $this->d2_m=array_fill(0,count($this->d2_b),array());
             $this->z_max=0;
@@ -49,13 +48,22 @@ namespace crast{
             }
             return $this->do_rp(count($this->d2_b)-1,$this->maxCost,0,$this->sumCost,$this->sumValue);
         }
+        protected function setMemo($ln,$cn,$vn,$rtn){
+            if(!array_key_exists($cn,$this->d2_m[$ln])){$this->d2_m[$ln][$cn]=array();}
+            $this->d2_m[$ln][$cn][$vn]=$rtn;
+        }
+        protected function getMemo($ln,$cn,$vn){
+            if(!array_key_exists($cn,$this->d2_m[$ln])){return false;}
+            if(!array_key_exists($vn,$this->d2_m[$ln][$cn])){return false;}
+            return $this->d2_m[$ln][$cn][$vn];
+        }
         protected function do_rp($ln,$cn,$vn,$rc,$rv){//最大有効リスト番号、残りコスト、現在価値、有効リスト合計コスト、有効リスト合計価値
-            if(array_key_exists($cn,$this->d2_m[$ln])){return $this->d2_m[$ln][$cn];}
-            if($cn<=0){$this->d2_m[$ln][$cn]=0;return 0;}
-            if(($this->z_max-$vn)/$cn>$this->d2_b[$ln][2]+$this->some_small){$this->d2_m[$ln][$cn]=0;return 0;}
-            if(($this->z_max-$vn)>$rv){$this->d2_m[$ln][$cn]=0;return 0;}
-            if($cn>=$rc){$this->d2_m[$ln][$cn]=$rv;return $rv;}
-            if($ln==0){$this->d2_m[$ln][$cn]=0;return 0;}
+            if($rtn=$this->getMemo($ln,$cn,$vn)!==false){return $rtn;}
+            if($cn<=0){$this->setMemo($ln,$cn,$vn,0);return 0;}
+            if(($this->z_max-$vn)/$cn>$this->d2_b[$ln][2]+$this->some_small){$this->setMemo($ln,$cn,$vn,0);return 0;}
+            if(($this->z_max-$vn)>$rv){$this->setMemo($ln,$cn,$vn,0);return 0;}
+            if($cn>=$rc){$this->setMemo($ln,$cn,$vn,$rv);return $rv;}
+            if($ln==0){$this->setMemo($ln,$cn,$vn,0);return 0;}
     
             $rc-=$this->d2_b[$ln][0];
             $rv-=$this->d2_b[$ln][1];
@@ -64,7 +72,7 @@ namespace crast{
                 $rtn2=$this->do_rp($ln-1,$cn-$this->d2_b[$ln][0],$vn+$this->d2_b[$ln][1],$rc,$rv);
                 $rtn=max($rtn,$rtn2+$this->d2_b[$ln][1]);
             }
-            $this->d2_m[$ln][$cn]=$rtn;
+            $this->setMemo($ln,$cn,$vn,$rtn);
             if($this->z_max<$vn+$rtn){$this->z_max=$vn+$rtn;}
             return $rtn;
         }
