@@ -1,0 +1,66 @@
+namespace crast{
+    class knapsack{//コスト辺り価値で昇順に並べて、残りコストで有効最大番号のコスト比でも暫定最大値に届かないなら打ち切り、で探索を早める
+        protected $d2_b;//(コスト,価値)の配列
+        protected $cn_b;//count($d2_b)
+        protected $d2_m;//有効最大リスト番号=>残りコスト=>最大価値のメモ配列
+        protected $maxCost;//指定された最大コスト条件
+        protected $z_max;//暫定最大値
+        protected $some_small;//浮動小数点誤差は怖いので、比較時に下駄を履かせておく分。
+    
+        public function __construct($d2_b,$maxCost){
+            foreach($d2_b as $d1_fe){
+                $d1_fe[2]=$d1_fe[1]/$d1_fe[0];
+                $this->insert($d1_fe);
+                $this->cn_b++;
+            }
+            $this->maxCost=$maxCost;
+            $this->some_small=0.00001;
+        }
+        protected function insert($d1_t){
+            if($this->cn_b==0){$this->d2_b=array($d1_t);return;}//今回が一つ目の場合
+            $tu=$this->cn_b-1;$td=0;
+            if($this->d2_b[$this->cn_b-1][2]<=$d1_t[2]){$this->d2_b[]=$d1_t;}//最後尾に追加パターン
+            elseif($this->d2_b[0][2]>$d1_t[2]){array_unshift($this->d2_b,0);$this->d2_b[0]=$d1_t;}//先頭に追加パターン
+            else{//二分探索で追加位置を探す
+                while(true){
+                    if($tu-$td==1){array_splice($this->d2_b,$tu,0,0);$this->d2_b[$tu]=$d1_t;break;}
+                    else{
+                        $nt=floor(($tu+$td)/2);
+                        if($this->d2_b[$nt][2]<=$d1_t[2]){$td=$nt;}
+                        else{$tu=$nt;}
+                    }//下以上で上より小さい、の範囲で狭めていく
+                }
+            }
+        }   
+        public function getReturn(){
+            $this->d2_m=array_fill(0,count($this->d2_b),array());
+            $this->z_max=0;
+            $lastCost=$this->maxCost;
+            for($i1=count($this->d2_b)-1;$i1>=0;$i1--){
+                if($this->d2_b[$i1][0]>$lastCost){break;}
+                $this->z_max+=$this->d2_b[$i1][1];
+                $lastCost-=$this->d2_b[$i1][0];
+            }
+            return $this->do_rp(count($this->d2_b)-1,$this->maxCost,0);
+        }
+        protected function do_rp($ln,$cn,$vn){
+            if(array_key_exists($cn,$this->d2_m[$ln])){return $this->d2_m[$ln][$cn];}
+            if($cn<=0){$this->d2_m[$ln][$cn]=0;return 0;}
+            if(($this->z_max-$vn)/$cn>$this->d2_b[$ln][2]+$this->some_small){$this->d2_m[$ln][$cn]=0;return 0;}
+            if($ln==0){$this->d2_m[$ln][$cn]=0;return 0;}
+    
+            $rtn=$this->do_rp($ln-1,$cn,$vn);
+            if($this->d2_b[$ln][0]<=$cn){
+                $rtn2=$this->do_rp($ln-1,$cn-$this->d2_b[$ln][0],$vn+$this->d2_b[$ln][1]);
+                $rtn=max($rtn,$rtn2+$this->d2_b[$ln][1]);
+            }
+            $this->d2_m[$ln][$cn]=$rtn;
+            if($this->z_max<$vn+$rtn){$this->z_max=$vn+$rtn;}
+            return $rtn;
+        }
+    }
+    function knapsack($d2_b,$maxCost){
+        $obj=new knapsack($d2_b,$maxCost);
+        return $obj->getReturn();
+    }
+}
