@@ -286,6 +286,306 @@ timecheck();
 //にしても、有効リストコスト合計が残りコスト以下なら全部入れて終了、の処理が増えた分は有ってもいいと思うんだが、完全に影響0だな。
 //暫定最大値処理はそこまで強いか……。もうこれが最終盤でいいか。
 //あとは、細かい所で、0リターンする時も毎回メモに入れた方がいいかどうか。→入れた方が明確に速い。5%くらい？
+//某所でのチェックでミス発覚。現在価値は有効最大リスト番号と残りコストだけでは決まらないよ。メモに3変数必要だ。
+
+class knapsack3{//コスト辺り価値で昇順に並べて、暫定最大値を算出。残りコストが残り要素合計コストを上回るなら全部入れて終了、残り要素合計価値が暫定最大値との差分に満たないなら0リターンで終了。
+    protected $d2_b;
+    protected $cn_b;
+    protected $d2_m;
+    protected $maxCost;
+    protected $z_max;//暫定最大値
+    protected $sumCost;//コスト合計
+    protected $sumValue;//価値合計<?PHP
+//新しいコードを試してみる場所。
+
+//ナップサック問題を解く処理。
+set_time_limit(0);
+function timeCheck(){
+	static $beforeCheckTime;
+	$newCheckTime=substr(str_pad(hrtime()[0],9,"0",STR_PAD_LEFT).".".str_pad(hrtime()[1],9,"0",STR_PAD_LEFT),4,9);
+	if(isset($beforeCheckTime)){$echo=round($newCheckTime-$beforeCheckTime,3);echo "time_$echo<br>\n";}
+	$beforeCheckTime=$newCheckTime;
+}
+//テスト用乱数生成
+$ln_t=300;
+$ln_c=100;
+$ln_v=100;
+$maxCost=10000;
+$d2_b=array();
+for($i1=0;$i1<$ln_t;$i1++){
+    $d2_b[]=array(rand(1,$ln_c),rand(1,$ln_v));
+}
+timecheck();
+
+
+$d2_m=array_fill(0,$ln_t,array());
+$an2=simple_rp($ln_t-1,$maxCost);
+echo "$an2\n";
+timecheck();
+
+function simple_rp($ln,$cn){
+    global $d2_b;
+    global $d2_m;
+
+    if(array_key_exists($cn,$d2_m[$ln])){return $d2_m[$ln][$cn];}
+    if($cn<=0){return 0;}
+    if($ln==0){
+        if($d2_b[0][0]<=$cn){return $d2_b[0][1];}
+        else{return 0;}
+    }
+    $rtn=simple_rp($ln-1,$cn);
+    if($d2_b[$ln][0]<=$cn){
+        $rtn2=$d2_b[$ln][1]+simple_rp($ln-1,$cn-$d2_b[$ln][0]);
+        $rtn=max($rtn,$rtn2);
+    }
+    $d2_m[$ln][$cn]=$rtn;
+    return $rtn;
+}
+
+class knapsack0{
+    protected $d2_b;
+    protected $d2_m;
+    protected $maxCost;
+    protected $rotete1;
+    protected $rotete2;
+    protected $rotete3;
+    
+    public function __construct($d2_b,$maxCost){
+        $this->d2_b=$d2_b;
+        $this->maxCost=$maxCost;
+    }
+    public function getReturn(){
+        $this->d2_m=array_fill(0,count($this->d2_b),array());
+        $this->rotate1=0;
+        $this->rotate2=0;
+        $this->rotate3=0;
+        return $this->do_rp(count($this->d2_b)-1,$this->maxCost);
+    }
+    protected function do_rp($ln,$cn){
+        $this->rotate1++;
+        if(array_key_exists($cn,$this->d2_m[$ln])){return $this->d2_m[$ln][$cn];}
+        $this->rotate2++;
+        if($cn<=0){return 0;}
+        if($ln==0){
+            if($this->d2_b[0][0]<=$cn){return $this->d2_b[0][1];}
+            else{return 0;}
+        }
+
+        $this->rotate3++;
+        $rtn=$this->do_rp($ln-1,$cn);
+        if($this->d2_b[$ln][0]<=$cn){
+            $rtn2=$this->d2_b[$ln][1]+$this->do_rp($ln-1,$cn-$this->d2_b[$ln][0]);
+            $rtn=max($rtn,$rtn2);
+        }
+        $this->d2_m[$ln][$cn]=$rtn;
+        return $rtn;
+    }
+    public function getRoteteCount(){
+        echo "<br>\n".$this->rotate1.",".$this->rotate1-$this->rotate2.",".$this->rotate2-$this->rotate3.",".$this->rotate3."<br>\n";
+    }
+}
+$obj=new knapsack0($d2_b,$maxCost);
+$an=$obj->getReturn();
+echo "knapsack0 $an\n";
+$obj->getRoteteCount();
+timecheck();
+
+class knapsack1{//コスト昇順に並べて、残りコストで全部とれるならそこで終わることで探索を早める
+    protected $d2_b;
+    protected $cn_b;
+    protected $d2_m;
+    protected $maxCost;
+    protected $sumCost;
+    protected $rotate1;
+    protected $rotate2;
+    protected $rotate3;
+
+    public function __construct($d2_b,$maxCost){
+        $this->sumCost=0;
+        foreach($d2_b as $d1_fe){
+            $this->sumCost+=$d1_fe[0];
+            $this->insert($d1_fe);
+            $this->cn_b++;
+        }
+        $this->maxCost=$maxCost;
+    }
+    protected function insert($d1_t){
+        if($this->cn_b==0){$this->d2_b=array($d1_t);return;}//今回が一つ目の場合
+        $tu=$this->cn_b-1;$td=0;
+        if($this->d2_b[$this->cn_b-1][0]<=$d1_t[0]){$this->d2_b[]=$d1_t;}//最後尾に追加パターン
+        elseif($this->d2_b[0][0]>$d1_t[0]){array_unshift($this->d2_b,0);$this->d2_b[0]=$d1_t;}//先頭に追加パターン
+        else{//二分探索で追加位置を探す
+            while(true){
+                if($tu-$td==1){array_splice($this->d2_b,$tu,0,0);$this->d2_b[$tu]=$d1_t;break;}
+                else{
+                    $nt=floor(($tu+$td)/2);
+                    if($this->d2_b[$nt][0]<=$d1_t[0]){$td=$nt;}
+                    else{$tu=$nt;}
+                }//下以上で上より小さい、の範囲で狭めていく
+            }
+        }
+    }   
+
+    public function getReturn(){
+        $this->d2_m=array_fill(0,count($this->d2_b),array());
+        return $this->do_rp(count($this->d2_b)-1,$this->maxCost,$this->sumCost);
+    }
+    protected function do_rp($ln,$cn,$rc){
+        $this->rotate1++;
+        if(array_key_exists($cn,$this->d2_m[$ln])){return $this->d2_m[$ln][$cn];}
+        $this->rotate2++;
+        if($cn<=0){return 0;}
+        if($cn>=$rc){
+            $rtn=0;
+            for($i1=0;$i1<=$ln;$i1++){
+                $rtn+=$this->d2_b[$i1][1];
+            }
+            $this->d2_m[$ln][$cn]=$rtn;
+            return $rtn;
+        }
+        if($ln==0){return 0;}
+        $this->rotate3++;
+
+        $rc-=$this->d2_b[$ln][0];
+        $rtn=$this->do_rp($ln-1,$cn,$rc);
+        if($this->d2_b[$ln][0]<=$cn){
+            $rtn2=$this->d2_b[$ln][1]+$this->do_rp($ln-1,$cn-$this->d2_b[$ln][0],$rc);
+            $rtn=max($rtn,$rtn2);
+        }
+        $this->d2_m[$ln][$cn]=$rtn;
+        return $rtn;
+    }
+    public function getRoteteCount(){
+        echo "<br>\n".$this->rotate1.",".$this->rotate1-$this->rotate2.",".$this->rotate2-$this->rotate3.",".$this->rotate3."<br>\n";
+    }
+}
+$obj=new knapsack1($d2_b,$maxCost);
+$an=$obj->getReturn();
+echo "knapsack1 $an\n";
+$obj->getRoteteCount();
+timecheck();
+
+class knapsack2{//コスト辺り価値で昇順に並べて、残りコストで有効最大番号のコスト比でも暫定最大値に届かないなら打ち切り、で探索を早める
+    protected $d2_b;//(コスト,価値)の配列
+    protected $cn_b;//count($d2_b)
+    protected $d2_m;//有効最大リスト番号=>残りコスト=>最大価値のメモ配列
+    protected $maxCost;//指定された最大コスト条件
+    protected $z_max;//暫定最大値
+    protected $some_small;//浮動小数点誤差は怖いので、比較時に下駄を履かせておく分。
+    protected $rotate1;
+    protected $rotate2;
+    protected $rotate3;
+
+    public function __construct($d2_b,$maxCost){
+        foreach($d2_b as $d1_fe){
+            $d1_fe[2]=$d1_fe[1]/$d1_fe[0];
+            $this->insert($d1_fe);
+            $this->cn_b++;
+        }
+        $this->maxCost=$maxCost;
+        $this->some_small=0.00001;
+    }
+    protected function insert($d1_t){
+        if($this->cn_b==0){$this->d2_b=array($d1_t);return;}//今回が一つ目の場合
+        $tu=$this->cn_b-1;$td=0;
+        if($this->d2_b[$this->cn_b-1][2]<=$d1_t[2]){$this->d2_b[]=$d1_t;}//最後尾に追加パターン
+        elseif($this->d2_b[0][2]>$d1_t[2]){array_unshift($this->d2_b,0);$this->d2_b[0]=$d1_t;}//先頭に追加パターン
+        else{//二分探索で追加位置を探す
+            while(true){
+                if($tu-$td==1){array_splice($this->d2_b,$tu,0,0);$this->d2_b[$tu]=$d1_t;break;}
+                else{
+                    $nt=floor(($tu+$td)/2);
+                    if($this->d2_b[$nt][2]<=$d1_t[2]){$td=$nt;}
+                    else{$tu=$nt;}
+                }//下以上で上より小さい、の範囲で狭めていく
+            }
+        }
+    }   
+
+    public function getReturn(){
+        $this->d2_m=array_fill(0,count($this->d2_b),array());
+        $this->z_max=0;
+        $lastCost=$this->maxCost;
+        for($i1=count($this->d2_b)-1;$i1>=0;$i1--){
+            if($this->d2_b[$i1][0]>$lastCost){break;}
+            $this->z_max+=$this->d2_b[$i1][1];
+            $lastCost-=$this->d2_b[$i1][0];
+        }
+        return $this->do_rp(count($this->d2_b)-1,$this->maxCost,0);
+    }
+    protected function do_rp($ln,$cn,$vn){
+        $this->rotate1++;
+        if(array_key_exists($cn,$this->d2_m[$ln])){return $this->d2_m[$ln][$cn];}
+        $this->rotate2++;
+        if($cn<=0){$this->d2_m[$ln][$cn]=0;return 0;}
+        if(($this->z_max-$vn)/$cn>$this->d2_b[$ln][2]+$this->some_small){$this->d2_m[$ln][$cn]=0;return 0;}
+        if($ln==0){$this->d2_m[$ln][$cn]=0;return 0;}
+        $this->rotate3++;
+
+        $rtn=$this->do_rp($ln-1,$cn,$vn);
+        if($this->d2_b[$ln][0]<=$cn){
+            $rtn2=$this->do_rp($ln-1,$cn-$this->d2_b[$ln][0],$vn+$this->d2_b[$ln][1]);
+            $rtn=max($rtn,$rtn2+$this->d2_b[$ln][1]);
+        }
+        $this->d2_m[$ln][$cn]=$rtn;
+        if($this->z_max<$vn+$rtn){$this->z_max=$vn+$rtn;}
+        return $rtn;
+    }
+    public function getRoteteCount(){
+        echo "<br>\n".$this->rotate1.",".$this->rotate1-$this->rotate2.",".$this->rotate2-$this->rotate3.",".$this->rotate3."<br>\n";
+    }
+}
+$obj=new knapsack2($d2_b,$maxCost);//シンプル版より遅くなったぞどういうことだ。
+$an=$obj->getReturn();
+echo "knapsack2 $an\n";
+$obj->getRoteteCount();
+timecheck();
+
+//実験してみるよー。
+//小数計算嫌ったのかと思って掛け算にしてみたらもっと遅くなったなど。
+//それぞれちょっといじって再帰回数を表示してみる。
+// 25287 time_0.799
+// knapsack0 25287
+// 5299209,2611459,20172,2667578
+// time_0.936
+// knapsack1 25287
+// 3390764,1667971,10066,1712727
+// time_0.696
+// knapsack2 25287
+// 4029500,1923642,75177,2030681
+// time_0.894
+//単純に数数えるだけでも、結構遅くなるなあ。ていうか、その分でknapsack2の方が速くなってる。
+//再帰回数自体は減ってるんだよな。
+//こうしてみると、半分はメモ見て終了なんやな。なら、再帰の先頭でメモ見るより、再帰する前にメモ確認して再帰回数減らした方が、結果速いだろうか。
+//コードは長くなるけど、処理内容自体は減るはずだよな。
+//→ちょっと速くなったように見えるけど、rotate削ってみると元より遅くなってるんだな。
+//内部の最適化の範疇だろうけど、シンプルに書いた方がいい類か。
+//
+//試しに、条件文だけ増やしてみたら、1割以上遅くなるなど。掛け算割り算が駄目なのか。
+//よく考えると、残り要素合計価値との単純比較でいい話だな？掛け算も割り算も要らんわ
+//あれ、よく見たら最初に貪欲法で暫定最大値算出するの忘れてるやん。それじゃあ周回数減らないはずだよ。
+// 24469 time_0.79
+// knapsack0 24469
+// 5242777,2584289,19969,2638519
+// time_0.934
+// knapsack1 24469
+// 3301847,1624200,10066,1667581
+// time_0.682
+// knapsack2 24469
+// 188128,77823,15763,94542
+// time_0.044
+// knapsack3 24469
+// 1176429,574354,10053,592022
+// time_0.284
+//くそ速え……。再帰回数自体が10分の1以下ってのは余りにも強い。
+//で、なんでそこに対して更に探索終了条件増やしたはずなのに再帰回数が増えてるんだ3は。
+//ああそうか、有効リスト価値合計は、有効リストコスト合計が残りコストを大幅にオーバーしているならデカい数値になってしまうか。そりゃそうか。
+//にしても、有効リストコスト合計が残りコスト以下なら全部入れて終了、の処理が増えた分は有ってもいいと思うんだが、完全に影響0だな。
+//暫定最大値処理はそこまで強いか……。もうこれが最終盤でいいか。
+//あとは、細かい所で、0リターンする時も毎回メモに入れた方がいいかどうか。→入れた方が明確に速い。5%くらい？
+//某所でのチェックでミス発覚。現在価値は有効最大リスト番号と残りコストだけでは決まらないよ。メモに3変数必要だ。
+//あー。3変数だとメモリ的にも時間的にも重すぎるか。えーと、この場合は。
+//現在価値で分岐した場合は、メモに入れない。→だめか、結局影響は残るもんな。
 
 class knapsack3{//コスト辺り価値で昇順に並べて、暫定最大値を算出。残りコストが残り要素合計コストを上回るなら全部入れて終了、残り要素合計価値が暫定最大値との差分に満たないなら0リターンで終了。
     protected $d2_b;
@@ -295,6 +595,374 @@ class knapsack3{//コスト辺り価値で昇順に並べて、暫定最大値�
     protected $z_max;//暫定最大値
     protected $sumCost;//コスト合計
     protected $sumValue;//価値合計
+    protected $rotate1;
+    protected $rotate2;
+    protected $rotate3;
+
+    public function __construct($d2_b,$maxCost){
+        $this->sumCost=0;
+        $this->sumValue=0;
+        foreach($d2_b as $d1_fe){
+            $d1_fe[2]=$d1_fe[1]/$d1_fe[0];
+            $this->sumCost+=$d1_fe[0];
+            $this->sumValue+=$d1_fe[1];
+            $this->insert($d1_fe);
+            $this->cn_b++;
+            }
+        $this->maxCost=$maxCost;
+    }
+    protected function insert($d1_t){
+        if($this->cn_b==0){$this->d2_b=array($d1_t);return;}//今回が一つ目の場合
+        $tu=$this->cn_b-1;$td=0;
+        if($this->d2_b[$this->cn_b-1][2]<=$d1_t[2]){$this->d2_b[]=$d1_t;}//最後尾に追加パターン
+        elseif($this->d2_b[0][2]>$d1_t[2]){array_unshift($this->d2_b,0);$this->d2_b[0]=$d1_t;}//先頭に追加パターン
+        else{//二分探索で追加位置を探す
+            while(true){
+                if($tu-$td==1){array_splice($this->d2_b,$tu,0,0);$this->d2_b[$tu]=$d1_t;break;}
+                else{
+                    $nt=floor(($tu+$td)/2);
+                    if($this->d2_b[$nt][2]<=$d1_t[2]){$td=$nt;}
+                    else{$tu=$nt;}
+                }//下以上で上より小さい、の範囲で狭めていく
+            }
+        }
+    }   
+
+    public function getReturn(){
+        $this->d2_m=array_fill(0,count($this->d2_b),array());
+        $this->z_max=0;
+        $lastCost=$this->maxCost;
+        for($i1=count($this->d2_b)-1;$i1>=0;$i1--){
+            if($this->d2_b[$i1][0]>$lastCost){break;}
+            $this->z_max+=$this->d2_b[$i1][1];
+            $lastCost-=$this->d2_b[$i1][0];
+        }
+        return $this->do_rp(count($this->d2_b)-1,$this->maxCost,0,$this->sumCost,$this->sumValue);
+    }
+    protected function do_rp($ln,$cn,$vn,$rc,$rv){//最大有効リスト番号、残りコスト、現在価値、有効リスト合計コスト、有効リスト合計価値
+        $this->rotate1++;
+        if(array_key_exists($cn,$this->d2_m[$ln])){return $this->d2_m[$ln][$cn];}
+        $this->rotate2++;
+        if($cn<=0){$this->d2_m[$ln][$cn]=0;return 0;}
+        if(($this->z_max-$vn)/$cn>$this->d2_b[$ln][2]){return 0;}
+        if(($this->z_max-$vn)>$rv){return 0;}
+        if($cn>=$rc){$this->d2_m[$ln][$cn]=$rv;return $rv;}
+        if($ln==0){$this->d2_m[$ln][$cn]=0;return 0;}
+        $this->rotate3++;
+
+        $rc-=$this->d2_b[$ln][0];
+        $rv-=$this->d2_b[$ln][1];
+        $rtn=$this->do_rp($ln-1,$cn,$vn,$rc,$rv);
+        if($this->d2_b[$ln][0]<=$cn){
+            $rtn2=$this->do_rp($ln-1,$cn-$this->d2_b[$ln][0],$vn+$this->d2_b[$ln][1],$rc,$rv);
+            $rtn=max($rtn,$rtn2+$this->d2_b[$ln][1]);
+        }
+        $this->d2_m[$ln][$cn]=$rtn;
+        if($this->z_max<$vn+$rtn){$this->z_max=$vn+$rtn;}
+        return $rtn;
+    }
+    public function getRoteteCount(){
+        echo "<br>\n".$this->rotate1.",".$this->rotate1-$this->rotate2.",".$this->rotate2-$this->rotate3.",".$this->rotate3."<br>\n";
+    }
+}
+$obj=new knapsack3($d2_b,$maxCost);
+$an=$obj->getReturn();
+echo "knapsack3 $an\n";
+$obj->getRoteteCount();
+timecheck();
+
+//以下の関数は昔作ったやつで。これ、無駄は多いけど、正しい答えは出るんだよな。
+//そしてまた、速い時と遅い時のムラはデカいものの、分析することで、どうやって2,3の失敗を回避しているのか調べられるかもしれない。
+//んー、見てる限り、コスト比のいいものから可能な限り入れてる状態から優先してチェック＝分岐後の再帰の順序が逆ってだけのような。
+//→試しに逆にしてみたら、毎回誤答するようになった。ここで結構抑えられてたんやな……。
+//とりあえず、ひとつずつ今の自分の言葉に直していってみるしかないか。
+
+//ナップサック問題を処理する
+//要素配列、コストの位置、価値の位置、コスト上限
+//返り値は価値の合計の最大値
+function dkh_knapsack_lib_1($bvar,$cn,$vn,$lc){
+    $bn=count($bvar);//要素数を一旦数えておく
+    $ot_list=array();//作業用に、コスト・価値・コス比の配列を作る。
+    for($i1=0;$i1<$bn;$i1++){$ot_list[]=array($bvar[$i1][$cn],$bvar[$i1][$vn],$bvar[$i1][$vn]/$bvar[$i1][$cn]);}
+    $b_list=q_sort_lib($ot_list,2);//作業用配列をコス比で昇順に並び替える。
+    
+    $pmvn=0;$otln=$lc;
+    for($i1=$bn-1;$i1>=0;$i1--){//コス比の高いものからコスト上限内で詰めて、暫定最大値を決める。
+        if($otln<$b_list[$i1][0]){break;} 
+        $pmvn+=$b_list[$i1][1];
+        $otln-=$b_list[$i1][0];
+    }
+    $pmul=$i1;
+    $scn=$lc-$otln;//固定分コスト合計
+    $svn=$pmvn;//固定分価値合計
+    $c_list=$b_list;
+    array_splice($c_list,$pmul+1);
+    $tcn=0;$tvn=0;
+    for($i1=0;$i1<=$pmul;$i1++){//残り要素配列のコスト合計・価値合計を出しておく
+        $tcn+=$c_list[$i1][0];
+        $tvn+=$c_list[$i1][1];
+    }
+    $a_list=array();//解のリスト置き場
+    for($i1=$pmul+1;$i1<$bn;$i1++){//最初の暫定最大値の組み合わせからひとつずつ要素を外して最大値を探す
+        $c_list[]=$b_list[$i1];//残り要素リストにひとつ追加
+        $tcn+=$b_list[$i1][0];
+        $tvn+=$b_list[$i1][1];//残り要素リストのコスト合計と価値合計を増やす
+        $scn-=$b_list[$i1][0];
+        $svn-=$b_list[$i1][1];//固定分のコスト合計と価値合計を減らす
+
+        $otvar=array($c_list,$lc-$scn,$tcn,$tvn,$a_list,$pmvn,$pmvn-$svn);
+        $otavar=dkh_knapsack_lib_1_func_rp($otvar);//再帰処理で最大値を求める
+        $a_list=$otavar[1];//解のリスト更新
+        $pmvn=$svn+$otavar[0];//暫定最大値更新
+    }
+    return $pmvn;
+}//dkh_knapsack_lib_1　ここまで　再帰処理部分dkh_knapsack_lib_1_func_rpに続く
+
+/*
+    再帰処理部分。引数配列は、
+    0：残り要素リスト
+    1：残りコスト
+    2：残り要素コスト合計
+    3：残り要素価値合計
+    4：解のリスト：残り要素の最大インデックス、残りコスト、最大値
+    5：暫定最大値
+    6：暫定最大値への不足分
+    返り値配列は、
+    0：返り値用の残り範囲での最大値
+    1：解のリスト
+*/
+function dkh_knapsack_lib_1_func_rp($bvar){
+    $c_list=$bvar[0];//残り要素リスト
+    $lc=$bvar[1];//残りコスト
+    $ulcn=$bvar[2];//残り要素コスト合計
+    $ulvn=$bvar[3];//残り要素価値合計
+    $a_list=$bvar[4];//解のリスト：残り要素の最大インデックス、残りコスト、最大値
+    $pmmn=$bvar[5];//暫定最大値
+    $pmln=$bvar[6];//暫定最大値への不足分
+    
+    $cn=count($c_list)-1;//残り要素リストの最大インデックス
+    $avar=array(0,$a_list);//暫定返り値　0リターンならこのまま出力
+
+    //残りコストが0なら0リターン
+    if($lc==0){return $avar;}
+    //暫定最大値への不足分/残りコストが、最大インデックス要素のコス比を上回っているなら、無駄なので0リターン
+    if($pmln/$lc>$c_list[$cn][2]){return $avar;}
+    //残りコストが残り要素コスト合計以上なら、残り要素価値合計を返して終了
+    if($lc>=$ulcn){
+        $avar[0]=$ulvn;
+        $a_list[$cn][$lc]=$ulvn;//解のリストを更新
+        $avar[1]=$a_list;
+        return $avar;
+    }
+    //残り要素が一個である場合、既にコストが足りてる場合の処理は終えているため、0リターン
+    if($cn==0){return $avar;}
+    
+    //残り要素配列から、最大インデックス要素を取り出す
+    $mnvar=array_pop($c_list);
+    
+    //再帰パターン1：残り要素最大インデックス要素を使わない場合
+    //解のリストにある場合は再帰するまでもない
+    if(array_key_exists($cn-1,$a_list)){if(array_key_exists($lc,$a_list[$cn-1])){$ran=$a_list[$cn-1][$lc];goto jp_rp1;}}
+    $otvar=array($c_list,$lc,$ulcn-$mnvar[0],$ulvn-$mnvar[1],$a_list,$pmmn,$pmln);
+    $otavar=dkh_knapsack_lib_1_func_rp($otvar);
+    $ran=$otavar[0];//再帰返り値の回収
+    $a_list=$otavar[1];//解のリストの引継ぎ
+    jp_rp1:
+    if($ran>$pmln){$pmmn=$pmmn+$ran-$pmln;$pmln=$ran;}//最大値と不足分の更新
+            
+    
+    //再帰パターン2：残り要素最大インデックス要素を使う場合
+    //コストが足りなければ省略
+    //解のリストにある場合は再帰するまでもない
+    if($lc>=$mnvar[0]){
+        if(array_key_exists($cn-1,$a_list)){
+            if(array_key_exists($lc-$mnvar[0],$a_list[$cn-1])){
+                $ran1=$a_list[$cn-1][$lc-$mnvar[0]];goto jp_rp2;
+            }
+        }
+        $otvar=array($c_list,$lc-$mnvar[0],$ulcn-$mnvar[0],$ulvn-$mnvar[1],$a_list,$pmmn,$pmln-$mnvar[1]);
+        $otavar=dkh_knapsack_lib_1_func_rp($otvar);
+        $ran1=$otavar[0];//再帰返り値の回収
+        $a_list=$otavar[1];//解のリストの引継ぎ
+        jp_rp2:
+        $ran1+=$mnvar[1];//最大インデックス要素を使っている場合なのでその分足す
+        $ran=max($ran,$ran1);
+    }
+    $a_list[$cn][$lc]=$ran;//解のリストを更新
+    
+    //範囲内最大値、更新された解のリスト、を返り値として出力
+    return array($ran,$a_list);
+    
+}//function dkh_knapsack_lib_1_func_rp　ここまで
+    
+function q_sort_lib($list_a,$tn){//配列の配列をインデックス$tnで昇順にクイックソート
+    array_splice($list_a,0,0);
+    $cn=count($list_a);
+    $list_b=array($list_a[0]);
+    for($i1=1;$i1<$cn;$i1++){
+        if($list_b[$i1-1][$tn]<=$list_a[$i1][$tn]){$list_b[$i1]=$list_a[$i1];}
+        elseif($list_b[0][$tn]>$list_a[$i1][$tn]){array_splice($list_b,0,0,0);$list_b[0]=$list_a[$i1];}
+        else{
+            $tu=$i1-1;
+            $td=0;
+            while(true){
+                if($tu-$td==1){array_splice($list_b,$tu,0,0);$list_b[$tu]=$list_a[$i1];break;}
+                else{
+                    $nt=$td+floor(($tu-$td)/2);
+                    if($list_b[$nt][$tn]<=$list_a[$i1][$tn]){$td=$nt;}
+                    else{$tu=$nt;}
+                }
+            }
+        }
+    }
+    return $list_b;
+}//クイックソート本体部分ここまで
+ 
+// $an=dkh_knapsack_lib_1($d2_b,0,1,$maxCost);
+// echo "dkh_lib $an\n";
+// timecheck();
+
+class knapsack_old{//昔作ったものを分析するなど。
+    protected $d2_b;//コスト、価値の配列
+    protected $cn_b;//$d2_bの要素数
+    protected $d2_m;//有効最大リスト番号→残りコスト→範囲最大値のメモ配列
+    protected $maxCost;//最大コスト条件
+    protected $z_max;//暫定最大値
+    protected $sumCost;//コスト合計
+    protected $sumValue;//価値合計
+    protected $rotate1;
+    protected $rotate2;
+    protected $rotate3;
+
+    public function __construct($d2_b,$maxCost){
+        $this->sumCost=0;
+        $this->sumValue=0;
+        foreach($d2_b as $d1_fe){
+            $d1_fe[2]=$d1_fe[1]/$d1_fe[0];
+            $this->sumCost+=$d1_fe[0];
+            $this->sumValue+=$d1_fe[1];
+            $this->insert($d1_fe);
+            $this->cn_b++;
+        }
+        $this->maxCost=$maxCost;
+
+    }
+    protected function insert($d1_t){
+        if($this->cn_b==0){$this->d2_b=array($d1_t);return;}//今回が一つ目の場合
+        $tu=$this->cn_b-1;$td=0;
+        if($this->d2_b[$this->cn_b-1][2]<=$d1_t[2]){$this->d2_b[]=$d1_t;}//最後尾に追加パターン
+        elseif($this->d2_b[0][2]>$d1_t[2]){array_unshift($this->d2_b,0);$this->d2_b[0]=$d1_t;}//先頭に追加パターン
+        else{//二分探索で追加位置を探す
+            while(true){
+                if($tu-$td==1){array_splice($this->d2_b,$tu,0,0);$this->d2_b[$tu]=$d1_t;break;}
+                else{
+                    $nt=floor(($tu+$td)/2);
+                    if($this->d2_b[$nt][2]<=$d1_t[2]){$td=$nt;}
+                    else{$tu=$nt;}
+                }//下以上で上より小さい、の範囲で狭めていく
+            }
+        }
+    }   
+
+    public function getReturn(){
+        $this->d2_m=array_fill(0,count($this->d2_b),array());
+        $this->z_max=0;
+        $rc=$this->sumCost;
+        $rv=$this->sumValue;
+        $lastCost=$this->maxCost;
+        for($i1=$this->cn_b-1;$i1>=0;$i1--){//暫定最大値を貪欲法で作成
+            if($this->d2_b[$i1][0]>$lastCost){break;}
+            $this->z_max+=$this->d2_b[$i1][1];
+            $lastCost-=$this->d2_b[$i1][0];
+            $rc-=$this->d2_b[$i1][0];
+            $rv-=$this->d2_b[$i1][1];
+        }
+        $lastKey=$i1;
+        $vn=$this->z_max;
+        for($i1=$lastKey;;$i1++){//暫定最大値を作ったところから、要素を一つずつ増やしながらそれぞれ再帰していく。
+            $this->z_max=$vn+$this->do_rp($i1,$lastCost,$vn,$rc,$rv);//最大有効リスト番号、残りコスト、現在価値、有効リスト合計コスト、有効リスト合計価値
+            if($i1==$this->cn_b-1){break;}
+            $lastCost+=$this->d2_b[$i1+1][0];
+            $vn-=$this->d2_b[$i1+1][1];
+            $rc+=$this->d2_b[$i1+1][0];
+            $rv+=$this->d2_b[$i1+1][1];
+        }
+        return $this->z_max;//最終的に、更新された暫定最大値を解答とする。
+    }
+    protected function do_rp($ln,$cn,$vn,$rc,$rv){//最大有効リスト番号、残りコスト、現在価値、有効リスト合計コスト、有効リスト合計価値
+        $this->rotate1++;
+        if(array_key_exists($cn,$this->d2_m[$ln])){return $this->d2_m[$ln][$cn];}
+        $this->rotate2++;
+        if($cn<=0){$this->d2_m[$ln][$cn]=0;return 0;}
+        if(($this->z_max-$vn)/$cn>$this->d2_b[$ln][2]){return 0;}
+        if(($this->z_max-$vn)>$rv){return 0;}
+        if($cn>=$rc){$this->d2_m[$ln][$cn]=$rv;return $rv;}
+        if($ln==0){$this->d2_m[$ln][$cn]=0;return 0;}
+        $this->rotate3++;
+
+        $rc-=$this->d2_b[$ln][0];
+        $rv-=$this->d2_b[$ln][1];
+        $rtn=$this->do_rp($ln-1,$cn,$vn,$rc,$rv);
+        if($this->d2_b[$ln][0]<=$cn){
+            $rtn2=$this->do_rp($ln-1,$cn-$this->d2_b[$ln][0],$vn+$this->d2_b[$ln][1],$rc,$rv);
+            $rtn=max($rtn,$rtn2+$this->d2_b[$ln][1]);
+        }
+        $this->d2_m[$ln][$cn]=$rtn;
+        if($this->z_max<$vn+$rtn){$this->z_max=$vn+$rtn;}
+        return $rtn;
+    }
+    public function getRoteteCount(){
+        echo "<br>\n".$this->rotate1.",".$this->rotate1-$this->rotate2.",".$this->rotate2-$this->rotate3.",".$this->rotate3."<br>\n";
+    }
+}
+$obj=new knapsack_old($d2_b,$maxCost);
+$an=$obj->getReturn();
+echo "knapsack_old $an\n";
+$obj->getRoteteCount();
+timecheck();
+
+//なんでこれだとセーフなんだろうか……。
+//コスト比の低いものだけの状態から順にやっていくから、確実に単調増加で更新できるとか、そんな感じかな……？
+//2や3ほど速くはないけど、2や3と違って誤答無し、なおかつ0や1よりは3~4倍速い。十分。
+//ああ、昔は単調増加であることを確認してからとかやってた気がするな……。数学的な基本的思考能力は当時の方が高かったか。
+//プログラマはとりあえず動かして調整していく、みたいなとこあるけど、数学屋はやっぱ理論だけで例外なくきっちり埋めてこそだよな。
+
+class knapsack_test extends knapsack3{
+    protected function do_rp($ln,$cn,$vn,$rc,$rv){//最大有効リスト番号、残りコスト、現在価値、有効リスト合計コスト、有効リスト合計価値
+        $this->rotate1++;
+        if(array_key_exists($cn,$this->d2_m[$ln])){return $this->d2_m[$ln][$cn];}
+        $this->rotate2++;
+        if($cn<=0){$this->d2_m[$ln][$cn]=0;return 0;}
+        if(($this->z_max-$vn)/$cn>$this->d2_b[$ln][2]){return 0;}
+        if(($this->z_max-$vn)>$rv){return 0;}
+        if($cn>=$rc){$this->d2_m[$ln][$cn]=$rv;return $rv;}
+        if($ln==0){$this->d2_m[$ln][$cn]=0;return 0;}
+        $this->rotate3++;
+
+        $rc-=$this->d2_b[$ln][0];
+        $rv-=$this->d2_b[$ln][1];
+        $rtn2=0;
+        if($this->d2_b[$ln][0]<=$cn){
+            $rtn2=$this->do_rp($ln-1,$cn-$this->d2_b[$ln][0],$vn+$this->d2_b[$ln][1],$rc,$rv);
+        }
+        $rtn=$this->do_rp($ln-1,$cn,$vn,$rc,$rv);
+        $rtn=max($rtn,$rtn2+$this->d2_b[$ln][1]);
+        $this->d2_m[$ln][$cn]=$rtn;
+        if($this->z_max<$vn+$rtn){$this->z_max=$vn+$rtn;}
+        return $rtn;
+    }
+    public function getRoteteCount(){
+        echo "<br>\n".$this->rotate1.",".$this->rotate1-$this->rotate2.",".$this->rotate2-$this->rotate3.",".$this->rotate3."<br>\n";
+    }
+}
+// $obj=new knapsack_test($d2_b,$maxCost);
+// $an=$obj->getReturn();
+// echo "knapsack_test $an\n";
+// $obj->getRoteteCount();
+// timecheck();
+
+
+?>
     protected $rotate1;
     protected $rotate2;
     protected $rotate3;
@@ -371,6 +1039,90 @@ echo "knapsack3 $an\n";
 $obj->getRoteteCount();
 timecheck();
 
+class knapsack4{//コスト辺り価値で昇順に並べて、暫定最大値を算出。残りコストが残り要素合計コストを上回るなら全部入れて終了、残り要素合計価値が暫定最大値との差分に満たないなら0リターンで終了。
+    protected $d2_b;
+    protected $cn_b;
+    protected $d2_m;
+    protected $maxCost;
+    protected $z_max;//暫定最大値
+    protected $sumCost;//コスト合計
+    protected $sumValue;//価値合計
+    protected $some_small;//浮動小数点誤差は怖いので、比較時に下駄を履かせておく分。
+
+    public function __construct($d2_b,$maxCost){
+        $this->sumCost=0;
+        $this->sumValue=0;
+        foreach($d2_b as $d1_fe){
+            $d1_fe[2]=$d1_fe[1]/$d1_fe[0];
+            $this->sumCost+=$d1_fe[0];
+            $this->sumValue+=$d1_fe[1];
+            $this->insert($d1_fe);
+            $this->cn_b++;
+            }
+        $this->maxCost=$maxCost;
+    }
+    protected function insert($d1_t){
+        if($this->cn_b==0){$this->d2_b=array($d1_t);return;}//今回が一つ目の場合
+        $tu=$this->cn_b-1;$td=0;
+        if($this->d2_b[$this->cn_b-1][2]<=$d1_t[2]){$this->d2_b[]=$d1_t;}//最後尾に追加パターン
+        elseif($this->d2_b[0][2]>$d1_t[2]){array_unshift($this->d2_b,0);$this->d2_b[0]=$d1_t;}//先頭に追加パターン
+        else{//二分探索で追加位置を探す
+            while(true){
+                if($tu-$td==1){array_splice($this->d2_b,$tu,0,0);$this->d2_b[$tu]=$d1_t;break;}
+                else{
+                    $nt=floor(($tu+$td)/2);
+                    if($this->d2_b[$nt][2]<=$d1_t[2]){$td=$nt;}
+                    else{$tu=$nt;}
+                }//下以上で上より小さい、の範囲で狭めていく
+            }
+        }
+    }   
+    public function getReturn(){
+        $this->d2_m=array_fill(0,count($this->d2_b),array());
+        $this->z_max=0;
+        $lastCost=$this->maxCost;
+        for($i1=count($this->d2_b)-1;$i1>=0;$i1--){
+            if($this->d2_b[$i1][0]>$lastCost){break;}
+            $this->z_max+=$this->d2_b[$i1][1];
+            $lastCost-=$this->d2_b[$i1][0];
+        }
+        return $this->do_rp(count($this->d2_b)-1,$this->maxCost,0,$this->sumCost,$this->sumValue);
+    }
+    protected function setMemo($ln,$cn,$vn,$rtn){
+        if(!array_key_exists($cn,$this->d2_m[$ln])){$this->d2_m[$ln][$cn]=array();}
+        $this->d2_m[$ln][$cn][$vn]=$rtn;
+    }
+    protected function getMemo($ln,$cn,$vn){
+        if(!array_key_exists($cn,$this->d2_m[$ln])){return false;}
+        if(!array_key_exists($vn,$this->d2_m[$ln][$cn])){return false;}
+        return $this->d2_m[$ln][$cn][$vn];
+    }
+    protected function do_rp($ln,$cn,$vn,$rc,$rv){//最大有効リスト番号、残りコスト、現在価値、有効リスト合計コスト、有効リスト合計価値
+        if($rtn=$this->getMemo($ln,$cn,$vn)!==false){return $rtn;}
+        if($cn<=0){$this->setMemo($ln,$cn,$vn,0);return 0;}
+        if(($this->z_max-$vn)/$cn>$this->d2_b[$ln][2]+$this->some_small){$this->setMemo($ln,$cn,$vn,0);return 0;}
+        if(($this->z_max-$vn)>$rv){$this->setMemo($ln,$cn,$vn,0);return 0;}
+        if($cn>=$rc){$this->setMemo($ln,$cn,$vn,$rv);return $rv;}
+        if($ln==0){$this->setMemo($ln,$cn,$vn,0);return 0;}
+
+        $rc-=$this->d2_b[$ln][0];
+        $rv-=$this->d2_b[$ln][1];
+        $rtn=$this->do_rp($ln-1,$cn,$vn,$rc,$rv);
+        if($this->d2_b[$ln][0]<=$cn){
+            $rtn2=$this->do_rp($ln-1,$cn-$this->d2_b[$ln][0],$vn+$this->d2_b[$ln][1],$rc,$rv);
+            $rtn=max($rtn,$rtn2+$this->d2_b[$ln][1]);
+        }
+        $this->setMemo($ln,$cn,$vn,$rtn);
+        if($this->z_max<$vn+$rtn){$this->z_max=$vn+$rtn;}
+        return $rtn;
+    }
+}
+$obj=new knapsack4($d2_b,$maxCost);
+$an=$obj->getReturn();
+echo "knapsack4 $an\n";
+$obj->getRoteteCount();
+timecheck();
+
 class knapsack_test extends knapsack2{
     protected function do_rp($ln,$cn,$vn){
         $this->rotate1++;
@@ -395,11 +1147,11 @@ class knapsack_test extends knapsack2{
     }
 }
 
-$obj=new knapsack_test($d2_b,$maxCost);
-$an=$obj->getReturn();
-echo "knapsack_test $an\n";
-$obj->getRoteteCount();
-timecheck();
+//$obj=new knapsack_test($d2_b,$maxCost);
+//$an=$obj->getReturn();
+//echo "knapsack_test $an\n";
+//$obj->getRoteteCount();
+//timecheck();
 
 
 ?>
