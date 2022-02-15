@@ -1,0 +1,638 @@
+<?PHP
+//新しいコードを試してみる場所。
+
+set_time_limit(0);
+function timeCheck(){
+	static $beforeCheckTime;
+	$newCheckTime=substr(str_pad(hrtime()[0],9,"0",STR_PAD_LEFT).".".str_pad(hrtime()[1],9,"0",STR_PAD_LEFT),4,9);
+	if(isset($beforeCheckTime)){$echo=round($newCheckTime-$beforeCheckTime,3);echo "time_$echo<br>\n";}
+	$beforeCheckTime=$newCheckTime;
+}
+//../..../..../..../..../..../..../..../..../..
+//外部イテレータと内部イテレータの話、SPLHeapを使ってみようとか。
+//参考→http://www.tsukaeru-hp.jp/blog/web/iterator_and_generator
+//https://www.php.net/manual/ja/language.types.iterable.php
+//https://www.php.net/manual/ja/class.traversable.php
+//foreachで辿れるのは、配列とtraversable。
+//traversableに分類されるのは、IteratorAggregateインターフェイスあるいはIteratorインターフェイスを実装したオブジェクト。
+
+//Iteratorインターフェイスはそう難しくない。クラス内部に、foreachに必要なメソッドを設定するだけ。
+//https://www.php.net/manual/ja/class.iterator.php
+// interface Iterator extends Traversable {
+// 	/* メソッド */
+// 	public current(): mixed
+// 	public key(): mixed
+// 	public next(): void
+// 	public rewind(): void
+// 	public valid(): bool
+// }
+//これらを実装することにより、
+//foreach(Iterator as $key=>$value){}
+//の処理は、
+//for(Iterator->rewind();Iterator->valid()==true;Itarator->next()){
+//	$key=Itarator->key();
+//	$value=Iterator->current();
+//}
+//という処理と同様に扱われ、rewind()で設定された位置からnext()で指定される順にループさせることが出来る。
+//もちろん、必要な情報をpublicで出力可能なら、別のクラスとしてiteratorだけ作ってもいい。
+//そうすることで、一つのオブジェクトを複数のイテレータで回すことが出来るようになる。
+//それが、外部イテレータってことなんではないかなとか。
+
+//そういった、外部イテレータを呼び出すタイプのtraversableを表すインターフェイスが、IteratorAggregateインターフェイスらしい？
+//https://www.php.net/manual/ja/class.iteratoraggregate.php
+// interface IteratorAggregate extends Traversable {
+// 	/* メソッド */
+// 	public getIterator(): Traversable
+// }
+//であり、たとえば
+// public function getIterator() {
+// 	return new ArrayIterator($this);
+// }
+//みたいに使うらしい。あ、そうそう、こういう形で仕えるように、Traversableは型の名前としても有効なんだとか。
+
+//そして、こうやって呼び出すように、既定のイテレータが結構たくさんある、と。
+//https://www.php.net/manual/ja/spl.iterators.php
+//また、イテレータを作成するなら、ジェネレータ構文の関数を使うと言う手もある。
+//https://www.php.net/manual/ja/language.generators.php
+//returnの代わりにyieldを使うことで、次に呼ばれたときにyieldから再開する、そんなイメージ？
+//実際にはgeneraterクラスのオブジェクトを返すので、ジェネレータ関数(の返り値であるgeneraterクラスオブジェクト)をforeachの対象にできる。
+
+//シンプルには、
+//return new ArrayIterator($this);
+//で、オブジェクトのプロパティを列挙、
+//return new ArrayIterator(配列);
+//で、その配列の内容を列挙、という形になる模様。これだけで事足りることも多そうではある。
+//ArrayIteratorには他にもメソッドあるんだが、よく分からぬ。
+
+//他には、空配列のノリで空のイテレータを返すためのEmptyIteratorクラスなんかもある。
+//MultipleIteratorを使うと、複数のイテレータをセットで回せるっぽい？
+//FilterIteratorクラスでは、accept()がtrueを返す値のみ返ってくるイテレータになる。
+
+//これ以上は、実践で使われているものを見てみないと分からんか。
+
+//とりあえず、練習として、同様に汎用基本処理っぽいなと思いつつ触れてなかったSPLHeapの練習兼ねて、触ってみむ。
+// abstract class SplHeap implements Iterator, Countable {
+// 	/* メソッド */
+// 	public __construct()
+// 	protected compare(mixed $value1, mixed $value2): int
+// 	public count(): int
+// 	public current(): mixed
+// 	public extract(): mixed
+// 	public insert(mixed $value): bool
+// 	public isCorrupted(): bool
+// 	public isEmpty(): bool
+// 	public key(): int
+// 	public next(): void
+// 	public recoverFromCorruption(): bool
+// 	public rewind(): void
+// 	public top(): mixed
+// 	public valid(): bool
+// }
+//メソッド中、
+// 	public __construct()
+//は基本として、
+
+// 	public rewind(): void
+// 	public next(): void
+// 	public valid(): bool
+// 	public key(): int
+// 	public current(): mixed
+//がIteratorインターフェイス、
+
+// 	public count(): int
+//がCountableインターフェイス。
+
+// 	public isEmpty(): bool
+//もまあ、Countableみたいなもんだ。
+
+//基本的な特徴機能はそれ以外。
+
+// 	public isCorrupted(): bool
+// 	public recoverFromCorruption(): bool
+//はまあ特殊処理だろう。
+
+// 	protected compare(mixed $value1, mixed $value2): int
+// 	public insert(mixed $value): bool
+// 	public top(): mixed
+// 	public extract(): mixed
+//この4つが基本的な特徴だ。
+
+//compareが正ならvalue1が優先、負ならvalue2が優先として、ヒープが形成される。
+//要素の追加がinsert()、最優先要素の確認がtop()、最優先要素の取り出しがextract()となる。
+//SPLHeapだと、compareは抽象メソッドなのかな？
+//うん、抽象メソッドだね。extends SplHeapでcompare()を定義しないと動かない。
+//単純な昇順・降順のcompareを設定してあるのが、SplMaxHeapとSplMinHeapなわけだ。
+//とりあえず、単純な配列のソートを作ってみる。
+
+class h_sort extends SplHeap{
+	public function __construct(protected $kp,protected $rule=0){}
+	protected function compare($ar1,$ar2){
+		if($this->rule==0){
+			if($ar1==$ar2){return 0;}
+			return $ar1<$ar2? 1:-1;	
+		}elseif($this->rule==1){
+			if($ar1==$ar2){return 0;}
+			return $ar1>$ar2? 1:-1;	
+		}
+	}
+}
+
+// $test=new h_sort(0);
+// $test->insert([2,3]);
+// $test->insert([1,4]);
+// $test->insert([3,2]);
+// while(!$test->isEmpty()){
+// 	print_r($test->extract());
+// }
+
+//うん、いけるね。
+//これまで使ってきた、挿入ソート式と速度を比較してみる。ソートの速度はマージソート＞ヒープソート＞挿入ソートなんだっけか……？
+//ただ、一度ソートした後の追加に関しては全部再ソートするより挿入した方が速いので、大体ソートされてる場合は挿入ソートの方がいい場合もあるとかだったっけ……？
+//マージソートも作ってみるか……。
+
+//後から改造、ソート後の配列は即座に出力、保持しなくなった。それに伴ってイテレータも削除。
+
+class m_sort {
+	protected $cn=0;
+	public function __construct(protected $kp,protected $rule=0){
+	}
+	public function doSort($d2_t){
+		$this->cn=count($d2_t);
+		return $this->sort($d2_t,$this->cn);
+	}
+	protected function sort($d2_t1,$cn){
+		if($cn<2){return $d2_t1;}
+		$cn1=floor($cn/2);
+		$d2_t2=array_splice($d2_t1,$cn1);
+		$d2_t1=$this->sort($d2_t1,$cn1);
+		$d2_t2=$this->sort($d2_t2,$cn-$cn1);
+		$d2_rt=array();
+		$step1=0;
+		$step2=0;
+		for($i1=0;$i1<$cn;$i1++){
+			if($step1>=$cn1){$d2_rt[]=$d2_t2[$step2];$step2++;}
+			elseif($step2>=$cn-$cn1){$d2_rt[]=$d2_t1[$step1];$step1++;}
+			elseif($this->compare($d2_t1[$step1],$d2_t2[$step2])<0){$d2_rt[]=$d2_t2[$step2];$step2++;}
+			else{$d2_rt[]=$d2_t1[$step1];$step1++;}
+		}
+		return $d2_rt;
+	}
+	public function compare($node1,$node2){
+		if($this->rule=0){
+			if($node1[$this->kp]==$node2[$this->kp]){return 0;}
+			return $node1[$this->kp]<$node2[$this->kp]? 1:-1;	
+		}elseif($this->rule=1){
+			if($node1[$this->kp]==$node2[$this->kp]){return 0;}
+			return $node1[$this->kp]>$node2[$this->kp]? -1:1;
+		}
+	}
+	// public function printAll(){
+	// 	foreach($this->d2_rt as $d1_fe){
+	// 		print_r($d1_fe);
+	// 		echo"<br>\n";
+	// 	}
+	// }
+}
+// $test=new m_sort(0);
+// $d2_t=array();
+// $d2_t[]=array(3,5);
+// $d2_t[]=array(2,3);
+// $d2_t[]=array(4,8);
+// $d2_t[]=array(1,1);
+// $d2_t[]=array(5,7);
+// $test->startup($d2_t);
+// $test->printAll();
+
+//行けてるっぽいか。
+
+function q_sort_a_lib_2($d2_b,$kn){//$knで昇順にソート
+    $bn=count($d2_b);$d2_rt=array($d2_b[0]);
+    for($i1=1;$i1<$bn;$i1++){$d2_rt=q_sort_ap_lib_2($d2_rt,$d2_b[$i1],$kn);}
+    return $d2_rt;
+}//$knで昇順にソート
+function q_sort_ap_lib_2($d2_b,$d1_t,$kn){//$knで昇順に挿入
+    $bn=count($d2_b);$tu=$bn-1;$td=0;
+    if($bn==0){return array($d1_t);}//今回が一つ目の場合
+    if($d2_b[$bn-1][$kn]<=$d1_t[$kn]){$d2_b[]=$d1_t;}//最後尾に追加パターン
+    elseif($d2_b[0][$kn]>$d1_t[$kn]){array_unshift($d2_b,0);$d2_b[0]=$d1_t;}//先頭に追加パターン
+    else{//二分探索で追加位置を探す
+        while(true){
+            if($tu-$td==1){array_splice($d2_b,$tu,0,0);$d2_b[$tu]=$d1_t;break;}
+            else{
+                $nt=floor(($tu+$td)/2);
+                if($d2_b[$nt][$kn]<=$d1_t[$kn]){$td=$nt;}
+                else{$tu=$nt;}
+            }//下以上で上より小さい、の範囲で狭めていく
+        }
+    }
+    return $d2_b;
+}//$knで昇順に挿入
+{
+	// //挿入ソートも用意して、いざ実験。
+	// //乱数を作成する。
+	// $ln_b=100000;
+	// $ln_k=100000;
+	// $ln_e=100000;
+	// $d2_t=array();
+	// for($i1=0;$i1<$ln_b;$i1++){
+	// 	$d2_t[]=array(rand(0,$ln_k),rand(0,$ln_e));//$d2_t[名前]が、array(優先度,内容)となる。
+	// }
+	// timeCheck();
+
+	// // $d2_rt=q_sort_a_lib_2($d2_t,0);
+	// // foreach($d2_rt as $d1_fe){
+	// // 	$d1_rt=$d1_fe;
+	// // 	echo "($d1_rt[0],$d1_rt[1])";
+	// // }
+	// // echo"<br>\n";
+	// // timeCheck();
+
+	// $test=new h_sort(1,0);
+	// foreach($d2_t as $d1_fe){
+	// 	$test->insert($d1_fe);
+	// }
+	// timeCheck();
+	// while(!$test->isEmpty()){
+	// 	$d1_rt=$test->extract();
+	// //	echo "($d1_rt[0],$d1_rt[1])";
+	// }
+	// //echo"<br>\n";
+	// timeCheck();
+	// echo"<br>\n";
+
+	// $test=new m_sort(0);
+	// $test->startup($d2_t);
+	// timeCheck();
+	// foreach($test as $d1_fe){
+	// 	$d1_rt=$d1_fe;
+	// //	echo "($d1_rt[0],$d1_rt[1])";
+	// }
+	// //echo"<br>\n";
+	// timeCheck();
+	// echo"<br>\n";
+}
+//うーし、とりあえず、10,100,100で様子見して、3つとも同じ結果が返るのを確認して満足。
+//外部イテレータも使ってるけど、ちゃんと回っているようでなにより。
+//とりあえず、一万、一万、一万で速度計測。
+//iがtime_0.399、hがtime_0.029、mがtime_0.027となりまして。予想通りではある。
+//続いて、十万、十万、十万で速度計測。
+//iがtime_307.59、hがtime_0.487、mがtime_0.399となった。挿入ソート遅過ぎである。
+//ヒープソート・マージソートが20倍程度で済ましているのに、1000倍遅いのはやってられんで。
+//挿入ソートをのぞいて百万、百万、百万で速度計測。
+//hがtime_10.407、mがtime_7.051となった。どんどん差が開いてくなあ。まとめてソートするならマージソート最速ってのは確からしい。
+//とはいえだ。マージソートは全部そろってからでないとソートできない。
+//ヒープソートは順次追加できるけど、取り出す際にも時間コストが分散する。
+//使い分けも考えないといかんのだろうなあ。
+//一千、一千、一千だと、time_0.005、time_0.003、time_0.002となってるのを見るに、100以下だと挿入ソートの方が速くないかこれ。
+//マージソートで十分減った後、及び、一旦ソートした後の追加に関しては、挿入ソートの方がいいのかもしれない。
+//とりあえず、10個だけソートするだけなら一番速いのは何なのか、探してみよう。
+{
+	// //10個だけソートを大量に繰り返す用の乱数。
+	// $tn=10000;
+	// $kl=100;
+	// $vl=100;
+	// $pn=100;
+	// $d3_t=array();
+	// for($i1=0;$i1<$tn;$i1++){
+	// 	$d3_t[$i1]=array();
+	// 	for($i2=0;$i2<$pn;$i2++){
+	// 		$d3_t[$i1][$i2]=array(rand(1,$kl),rand(1,$vl));
+	// 	}
+	// }
+	// timeCheck();
+
+	// //リンクリストの全探索挿入ソートも用意してみた。
+	// class i_sort_dll{
+	// 	protected $dll;
+	// 	public function __construct(protected $kp,protected $rule=0){
+	// 		$this->dll=new SplQueue;
+	// 	}
+	// 	public function compare($node1,$node2){
+	// 		if($this->rule=0){
+	// 			if($node1[$this->kp]==$node2[$this->kp]){return 0;}
+	// 			return $node1[$this->kp]<$node2[$this->kp]? 1:-1;
+	// 		}elseif($this->rule=1){
+	// 			if($node1[$this->kp]==$node2[$this->kp]){return 0;}
+	// 			return $node1[$this->kp]>$node2[$this->kp]? -1:1;
+	// 		}
+	// 	}
+	// 	public function push($d1_t){
+	// 		if($this->dll->isEmpty()){
+	// 			$this->dll->push($d1_t);
+	// 			return;
+	// 		}
+	// 		foreach($this->dll as $key=>$d1_fe){
+	// 			if($this->compare($d1_t,$d1_fe)>=0){
+	// 				$this->dll->add($key,$d1_t);
+	// 				return;
+	// 			}
+	// 		}
+	// 		$this->dll->push($d1_t);
+	// 	}
+	// 	public function pop(){
+	// 		return $this->dll->shift();
+	// 	}
+	// 	public function count(){
+	// 		return $this->dll->count();
+	// 	}
+	// 	public function output(){
+	// 		return (array)$this->dll;
+	// 	}
+	// }
+
+	// //いざ実験。
+	// for($i1=0;$i1<$tn;$i1++){
+	// 	$test=new i_sort_dll(0,0);
+	// 	for($i2=0;$i2<$pn;$i2++){
+	// 		$test->push($d3_t[$i1][$i2]);
+	// 	}
+	// 	$d2_rt=$test->output();
+	// }
+	// timeCheck();
+	// for($i1=0;$i1<$tn;$i1++){
+	// 	$d2_rt=array();
+	// 	for($i2=0;$i2<$pn;$i2++){
+	// 		$d2_rt=q_sort_ap_lib_2($d2_rt,$d3_t[$i1][$i2],0);
+	// 	}
+	// }
+	// timeCheck();
+	// for($i1=0;$i1<$tn;$i1++){
+	// 	$test=new h_sort(0,0);
+	// 	for($i2=0;$i2<$pn;$i2++){
+	// 		$test->insert($d3_t[$i1][$i2]);
+	// 	}
+	// 	$d2_rt=array();
+	// 	for($i2=0;$i2<$pn;$i2++){
+	// 		$d2_rt[]=$test->extract();
+	// 	}
+	// }
+	// timeCheck();
+	// $test=new m_sort(0,0);
+	// for($i1=0;$i1<$tn;$i1++){
+	// 	$d2_rt=$test->doSort($d3_t[$i1]);
+	// }
+	// timeCheck();
+	// //100000で試した結果。
+	// // time_0.774
+	// // time_0.535
+	// // time_0.796
+	// // time_0.909
+	// //となった。二分探索挿入ソートが一番速いと考えて差し支えなさそう。
+}
+//ということで、二分探索挿入ソートを混ぜたマージソートを作ってみる。
+{
+	//あれ……？count(配列)って、配列の大きさによって速度変わるんだっけ……？
+	//実験。
+	// $d1_t=range(0,10000);
+	// for($i1=0;$i1<100;$i1++){
+	// 	unset($d1_t[rand(0,10000)]);
+	// }
+	// timeCheck();
+	// for($i1=0;$i1<10000000;$i1++){
+	// 	$otn=count($d1_t);
+	// }
+	// timeCheck();
+	//少なくとも、単純なrange(0,10000)とかでは、変化なし。1千万回で0,1秒ほど。
+	//ランダムに何か所かunsetしてみても、変わらず。countは速度一定とみていいか。プロパティ読んでるかも。
+}
+//countは毎回やってもそんなに遅延要因にはならんっぽいか。
+
+class c_sort {
+	//protected $kp;//キーの位置
+	//protected $rule1;//0なら昇順、1なら降順
+	//protected $rule2;//0なら先入れ先置き、1なら先入れ後置き
+	public function __construct(protected $kp,protected $rule1=0,protected $rule2=0){
+	}
+	public function sort($d2_t1){
+		$cn=count($d2_t1);
+		if($cn<2){return $d2_t1;}
+		elseif($cn<5){return $this->i_sort($d2_t1);}
+
+		$cn1=floor($cn/2);
+		$d2_t2=array_splice($d2_t1,$cn1);
+		$d2_t1=$this->sort($d2_t1);
+		$d2_t2=$this->sort($d2_t2);
+		$d2_rt=array();
+		$step1=0;
+		$step2=0;
+		for($i1=0;$i1<$cn;$i1++){
+			if($step1>=$cn1){
+				for(;$step2<$cn-$cn1;$step2++){
+					$d2_rt[]=$d2_t2[$step2];
+				}
+				return $d2_rt;
+			}elseif($step2>=$cn-$cn1){
+				for(;$step1<$cn1;$step1++){
+					$d2_rt[]=$d2_t1[$step1];
+				}
+				return $d2_rt;
+			}elseif($this->compare($d2_t1[$step1],$d2_t2[$step2])<0){
+				$d2_rt[]=$d2_t2[$step2];
+				$step2++;
+			}else{
+				$d2_rt[]=$d2_t1[$step1];
+				$step1++;
+			}
+		}
+		return $d2_rt;//不要なはずだけど、一応置いておく。
+	}
+	protected function compare($node1,$node2){//$node1を先置きするべきなら1、後置きするべきなら-1を返す
+		if($this->rule1==0){
+			if($node1[$this->kp]==$node2[$this->kp]){
+				return (-1)**$this->rule2;
+			}
+			return $node1[$this->kp]<$node2[$this->kp]? 1:-1;	
+		}elseif($this->rule1==1){
+			if($node1[$this->kp]==$node2[$this->kp]){
+				return (-1)**$this->rule2;
+			}
+			return $node1[$this->kp]>$node2[$this->kp]? -1:1;
+		}
+	}
+	public function i_sort($d2_t){//挿入ソート
+		$cn=count($d2_t);
+		$d2_rt=array($d2_t[0]);
+		for($i1=1;$i1<$cn;$i1++){
+			$d2_rt=$this->insert($d2_rt,$d2_t[$i1]);
+		}
+		return $d2_rt;
+	}
+	protected function insert($d2_b,$d1_t){//挿入ソートの挿入部分
+		$cn=count($d2_b);
+		if($cn==0){return array($d1_t);}//今回が一つ目の場合
+		
+		$tu=$cn-1;
+		$td=0;
+
+		if($this->compare($d2_b[$cn-1],$d1_t)>0){//最後尾に追加パターン
+			$d2_b[]=$d1_t;
+			return $d2_b;
+		}elseif($this->compare($d2_b[0],$d1_t)<0){//先頭に追加パターン
+			array_unshift($d2_b,0);
+			$d2_b[0]=$d1_t;
+			return $d2_b;
+		}
+		else{//二分探索で追加位置を探す
+			while(true){
+				if($tu-$td==1){
+					array_splice($d2_b,$tu,0,0);
+					$d2_b[$tu]=$d1_t;
+					return $d2_b;
+				}
+				else{
+					$half=floor(($tu+$td)/2);
+					if($this->compare($d2_b[$half],$d1_t)>0){//中間点が挿入分より先置きすべきなら
+						$td=$half;
+					}else{
+						$tu=$half;
+					}
+				}
+			}
+		}
+		return $d2_b;
+	}
+}
+class c_sort_2 {
+	//protected $kp;//キーの位置
+	//protected $rule1;//0なら昇順、1なら降順
+	//protected $rule2;//0なら先入れ先置き、1なら先入れ後置き
+	public function __construct(protected $kp,protected $rule1=0,protected $rule2=0){
+	}
+	public function sort($d2_t){
+		$cn=count($d2_t);
+		if($cn<2){return $d2_t;}
+		elseif($cn<10){return $this->i_sort($d2_t);}
+
+		$cn1=ceil($cn/2);
+		$cn2=$cn-$cn1;
+		list($d2_t1,$d2_t2)=array_chunk($d2_t,$cn1);
+		$d2_t1=$this->sort($d2_t1);
+		$d2_t2=$this->sort($d2_t2);
+		
+		$d2_rt=array();
+		$step1=0;
+		$step2=0;
+		for($i1=0;$i1<$cn;$i1++){
+			if($step1>=$cn1){
+				for(;$step2<$cn2;$step2++){
+					$d2_rt[]=$d2_t2[$step2];
+				}
+				return $d2_rt;
+			}elseif($step2>=$cn2){
+				for(;$step1<$cn1;$step1++){
+					$d2_rt[]=$d2_t1[$step1];
+				}
+				return $d2_rt;
+			}elseif($this->compare($d2_t1[$step1],$d2_t2[$step2])<0){
+				$d2_rt[]=$d2_t2[$step2];
+				$step2++;
+			}else{
+				$d2_rt[]=$d2_t1[$step1];
+				$step1++;
+			}
+		}
+		return $d2_rt;//不要なはずだけど、一応置いておく。
+	}
+	protected function compare($node1,$node2){//$node1を先置きするべきなら1、後置きするべきなら-1を返す
+		if($this->rule1==0){
+			if($node1[$this->kp]==$node2[$this->kp]){
+				return (-1)**$this->rule2;
+			}
+			return $node1[$this->kp]<$node2[$this->kp]? 1:-1;	
+		}elseif($this->rule1==1){
+			if($node1[$this->kp]==$node2[$this->kp]){
+				return (-1)**$this->rule2;
+			}
+			return $node1[$this->kp]>$node2[$this->kp]? -1:1;
+		}
+	}
+	public function i_sort($d2_t){//挿入ソート
+		$cn=count($d2_t);
+		if($cn<2){return $d2_t;}
+
+		$d2_rt=array($d2_t[0]);
+		for($i1=1;$i1<$cn;$i1++){
+			$d2_rt=$this->insert($d2_rt,$d2_t[$i1]);
+		}
+		return $d2_rt;
+	}
+	public function insert($d2_b,$d1_t){//挿入ソートの挿入部分
+		$cn=count($d2_b);
+		if($cn==0){return array($d1_t);}//今回が一つ目の場合
+		
+		$tu=$cn-1;
+		$td=0;
+
+		if($this->compare($d2_b[$cn-1],$d1_t)>0){//最後尾に追加パターン
+			$d2_b[]=$d1_t;
+			return $d2_b;
+		}elseif($this->compare($d2_b[0],$d1_t)<0){//先頭に追加パターン
+			array_unshift($d2_b,0);
+			$d2_b[0]=$d1_t;
+			return $d2_b;
+		}
+		else{//二分探索で追加位置を探す
+			while(true){
+				if($tu-$td==1){
+					array_splice($d2_b,$tu,0,0);
+					$d2_b[$tu]=$d1_t;
+					return $d2_b;
+				}
+				else{
+					$half=floor(($tu+$td)/2);
+					if($this->compare($d2_b[$half],$d1_t)>0){//中間点が挿入分より先置きすべきなら
+						$td=$half;
+					}else{
+						$tu=$half;
+					}
+				}
+			}
+		}
+		return $d2_b;
+	}
+}
+{
+	// //乱数を作成する。
+	// $ln_b=100000;
+	// $ln_k=100000;
+	// $ln_e=100000;
+	// $d2_t=array();
+	// for($i1=0;$i1<$ln_b;$i1++){
+	// 	$d2_t[]=array(rand(0,$ln_k),rand(0,$ln_e));//$d2_t[名前]が、array(優先度,内容)となる。
+	// }
+	// timeCheck();
+
+	// $test=new m_sort(0);
+	// $d2_rt=$test->doSort($d2_t);
+	// timeCheck();
+
+	// $test=new c_sort(0);
+	// $d2_rt=$test->sort($d2_t);
+	// timeCheck();
+
+	// $test=new c_sort_2(0);
+	// $d2_rt=$test->sort($d2_t);
+	// timeCheck();
+}
+//んー、挿入ソート化とは別の所でちょっと早くなってる気もする。
+//0.38秒が0.35秒になる感じ。挿入ソート条件無くしても0.37秒は割る感じ。
+//どこがボトルネックなんだろうなあ、これ。
+//array_spliceで分割してるのを、array_chunkにしてみようか。
+//→大体0.34秒割るようになったので、速くはなってる。大差ではないけど。
+
+//んー、compareで毎回if分岐するのは無駄だよね。constructした時点で、どこを使うかは決定されてるんだから。
+//無名関数の代入とかその辺の処理で、関数の内容を設定する関数というものが書けたんでなかったっけ。
+//→不可能ではないっぽいけど、クラス宣言文内部だけでは完結しないっぽい？
+//参考→https://qiita.com/tadsan/items/b2a37d1a7fed1b5b2cb1
+//参考→https://php-archive.net/php/bind-callback/
+//少なくとも、こんな単純処理のために振り回すようなものではないと思う。
+//あー、可変変数の方で、ルールによって別のメソッドを呼び出す方式ならいけるか？
+//文字列結合よりはif分岐の方が速そうではある。
+//各関数を配列プロパティの要素に入れておいて呼び出すのはどうか。→実行できた。
+//でも明確に遅くなったので、if分岐は十分早いということでいいんじゃないかな。
+
+//今思いつく分ではこれが限度かー。大して変わらんかったね。
+
+
+
+?>
