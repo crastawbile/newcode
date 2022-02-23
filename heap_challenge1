@@ -1,0 +1,1610 @@
+<?PHP
+//新しいコードを試してみる場所。
+
+set_time_limit(0);
+function timeCheck(){
+	static $beforeCheckTime;
+	$newCheckTime=substr(str_pad(hrtime()[0],9,"0",STR_PAD_LEFT).".".str_pad(hrtime()[1],9,"0",STR_PAD_LEFT),4,9);
+	if(isset($beforeCheckTime)){$echo=round($newCheckTime-$beforeCheckTime,3);echo "time_$echo<br>\n";}
+	$beforeCheckTime=$newCheckTime;
+}
+//今回さわってみるのはヒープ。
+//参考→https://rsk0315.hatenablog.com/entry/2019/10/29/151823
+//優先度変更の可能な、名前付きヒープを一通り作ってみよう。
+
+//とりあえず、二部ヒープ(Binary heap)の実装にチャレンジ。
+
+//目指す構造としては、
+$testinput=array(
+	array("a",16,"1番目"),
+	array("b",14,"5番目"),
+	array("c",18,"2番目"),
+	array("d",11,"3番目"),
+	array("e",13,"4番目"),
+);
+$testdiff=array(
+	array("a",8),
+	array("c",7),
+	array("d",6),
+	array("c",5),
+	array("a",3),
+);
+$testoutput=array(
+	array("a",3,"1番目"),
+	array("c",5,"2番目"),
+	array("d",6,"3番目"),
+	array("e",13,"4番目"),
+	array("b",14,"5番目"),
+);
+//みたいなことが出来ればいいんでないかなとか。
+//というわけで、まずは個々の要素用のクラスを作る。
+//内容、優先度位置、名前位置=nullで生成。
+class heapNode{
+	public $value;//内容
+	public $key;//優先度
+	public $name;//名前
+	//protected $kp;//内容配列における優先度の位置
+	//protected $np;//内容配列における名前の位置
+	protected function setup(){}
+	public function __construct($value,protected $kp,protected $np=null){
+		$this->setup();
+		$this->setValue($value);
+	}
+	public function getValue(){
+		return $this->value;
+	}
+	public function setValue($value){
+		$this->value=$value;
+		$this->key=$value[$this->kp];
+		if($this->np!==null){
+			$this->name=$value[$this->np];
+		}
+	}
+	public function getKey(){
+		return $this->key;
+	}
+	public function setKey($key){
+		$this->value[$this->kp]=$key;
+		$this->key=$key;
+	}
+	public function getName(){
+		return $this->name;
+	}
+	public function setName($name){
+		$this->value[$this->np]=$name;
+		$this->name=$name;
+	}
+}
+class binaryHeapNode extends heapnode{
+	public $tag;//管理用の番号
+}
+//んで、オブジェクト操作部分を作成。
+class binaryHeapObj implements IteratorAggregate,countable{
+	protected $cn;//要素数
+	protected $d1_t;//番号ごとに対応するノードを格納する配列
+	//protected $rule;//0なら優先度が低いほど優先、1なら優先度が高いほど優先
+	protected function setup(){
+		$this->cn=0;
+		$this->d1_t=array();
+	}
+	public function __construct(protected $rule=0){
+		$this->setup();
+	}
+	protected function compare(int $tn1,int $tn2){//番号で比較、tn1の方が優先なら1、tn2の方が優先なら-1
+		$kn1=$this->d1_t[$tn1]->getKey();
+		$kn2=$this->d1_t[$tn2]->getKey();
+		//echo "compare $tn1:$kn1 , $tn2:$kn2\n";
+
+		if($this->rule==0){
+			if($kn1<$kn2){return 1;}
+			elseif($kn1>$kn2){return -1;}
+			elseif($kn1==$kn2){return 0;}
+		}else{
+			if($kn1<$kn2){return -1;}
+			elseif($kn1>$kn2){return 1;}
+			elseif($kn1==$kn2){return 0;}
+		}
+	}
+	protected function swap(int $tn1,int $tn2){//番号指定でノード二つを交換する
+		//echo"swap $tn1:$tn2\n";
+		list($this->d1_t[$tn1],$this->d1_t[$tn2])=array($this->d1_t[$tn2],$this->d1_t[$tn1]);
+		$this->d1_t[$tn1]->tag=$tn1;
+		$this->d1_t[$tn2]->tag=$tn2;
+	}
+	protected function alignUp(int $tn):int{//番号指定で、親より優先度が高いなら親と交換、再帰的に繰り返して交換後の番号を返す
+		if($tn<2){return $tn;}
+		$tn2=floor($tn/2);
+		if($this->compare($tn,$tn2)<=0){return $tn;}
+		$this->swap($tn,$tn2);
+		return $this->alignUp($tn2);
+	}
+	protected function alignDown(int $tn):int{//番号指定で、より優先度の高い子と比較して優先度が低いなら交換、再帰的に繰り返して交換後の番号を返す
+		if($tn*2>$this->cn){return $tn;}
+		elseif($tn*2==$this->cn){$tn2=$tn*2;}
+		else{
+			if($this->compare($tn*2,$tn*2+1)<0){$tn2=$tn*2+1;}
+			else{$tn2=$tn*2;}
+		}
+		if($this->compare($tn,$tn2)>=0){return $tn;}
+		$this->swap($tn,$tn2);
+		return $this->alignDown($tn2);
+	}
+	public function push(binaryHeapNode $node):int{//ノードで要素を追加する　一応、追加後の位置を返す
+		$this->cn++;
+		$this->d1_t[$this->cn]=$node;
+		$node->tag=$this->cn;
+		return $this->alignDown($this->alignUp($this->cn));
+	}
+	public function prioritize(binaryHeapNode $node,$new):int{//対象ノードの優先度を新しい値に変更して、優先度に基づいた位置に移動させる　一応、移動後の位置を返す
+		$node->setKey($new);
+		return $this->alignDown($this->alignUp($node->tag));
+	}
+	public function delete(binaryHeapNode $node){//ノード指定で削除する
+		$this->delete_n($node->tag);
+	}
+	public function splice(binaryHeapNode $node){//ノード指定で取り出して削除する
+		return $this->splice_n($node->tag);
+	}
+	protected function delete_n(int $tn){//番号指定で削除する
+		if($tn>$this->cn){return false;}
+		$this->d1_t[$tn]=$this->d1_t[$this->cn];
+		unset($this->d1_t[$this->cn]);
+		$this->cn--;
+		$this->alignDown($this->alignUp($tn));
+	}
+	protected function splice_n(int $tn):binaryHeapNode{//番号指定でノードを取り出して削除する
+		if($tn>$this->cn){return false;}
+		$node=$this->d1_t[$tn];
+		$this->delete_n($tn);
+		return $node;
+	}
+	public function pop():binaryHeapNode{//最優先ノードを取り出して削除する
+		return $this->splice_n(1);
+	}
+	public function top():binaryHeapNode{//最優先ノードを取得する
+		return $this->d1_t[1];
+	}
+	public function count():int{//要素数を返す
+		return $this->cn;
+	}
+	public function getIterator():Traversable {
+		return new ArrayIterator($this->d1_t);
+	}
+	public function clear(){//ヒープを削除する
+		$this->setup();
+	}
+	public function merge(self $heap){//同クラスの対象をこっちにマージする
+		$otln=$heap->count;
+		for($i1=0;$i1<$otln;$i1++){
+			$this->push($heap->pop());
+		}
+	}
+	public function getTree(){//ツリー本体を出力する
+		return $this->d1_t;
+	}
+	public function printValues(){//各ノードの内容配列を表示する
+		foreach($this->d1_t as $node){
+			print_r($node->getValue());
+		}
+	}
+
+	public function obj_test_method(){//各メソッドがちゃんと動いているかのテスト
+		$testTree=array(
+			1=>new heapNode(array("a",20,1),1,0),
+			2=>new heapNode(array("b",10,2),1,0),
+			3=>new heapNode(array("c",30,3),1,0),
+			4=>new heapNode(array("d", 5,4),1,0),
+			5=>new heapNode(array("e",15,5),1,0),
+			6=>new heapNode(array("f",25,6),1,0),
+			7=>new heapNode(array("g",35,7),1,0),
+		);
+		$this->d1_t=$testTree;
+		$this->cn=7;
+		{//compare
+			// echo"test compare\n";
+			// echo $this->compare(1,2)."\n";
+			// echo $this->compare(1,3)."\n";
+			// echo $this->compare(2,4)."\n";
+			// echo $this->compare(2,5)."\n";
+			// echo $this->compare(3,6)."\n";
+			// echo $this->compare(3,7)."\n";
+		}
+		{//swap
+			// $this->printValues();
+			// $this->swap(1,2);
+			// $this->printValues();
+			// $this->d1_t=$testTree;
+		}
+		{//alignUp
+			// echo"test alignUp\n";
+			// for($i1=1;$i1<=7;$i1++){
+			// 	echo $this->alignUp($i1)."\n";
+			// 	$this->printValues();
+			// 	$this->d1_t=$testTree;
+			// }
+		}
+		{//alignDown
+			// echo"test alignDown\n";
+			// for($i1=1;$i1<=7;$i1++){
+			// 	echo $this->alignDown($i1)."\n";
+			// 	$this->printValues();
+			// 	$this->d1_t=$testTree;
+			// }
+		}
+		{//align
+			// echo"test align\n";
+			// for($i1=1;$i1<=7;$i1++){
+			// 	echo $this->alignDown($this->alignUp($i1))."\n";
+			// 	$this->printValues();
+			// 	$this->d1_t=$testTree;
+			// }
+		}
+		{//push & pop
+			// $this->setup();
+			// foreach($testTree as $node){
+			// 	$this->push($node);
+			// }
+			// $this->printValues();
+			// while($this->cn>0){
+			// 	print_r($this->pop()->getValue());
+			// }
+			// $this->d1_t=$testTree;
+			// $this->cn=7;
+		}
+
+	}
+
+}
+//それから、オブジェクト管理部分を作成。
+//優先度位置、名前位置=null、rule=0：0なら昇順、1なら降順
+class binaryHeap implements IteratorAggregate,countable{
+	protected $d1_n;//名前→ノード配列
+	protected $heap;//binaryHeapObjオブジェクト
+	//protected $kp;//内容配列における優先度の位置
+	//protected $np;//内容配列における名前の位置
+	//protected $rule;//0なら優先度が低いほど優先、1なら優先度が高いほど優先
+	protected function setup(){
+		$this->d1_n=array();
+		$this->heap=new binaryHeapObj($this->rule);
+	}
+	public function __construct(protected $kp,protected $np=null,protected $rule=0){
+		$this->setup();
+	}
+	public function push($d1_v){
+		if($this->np===null){$this->doPush($d1_v);return;}
+		$name=$d1_v[$this->np];
+		if(isset($this->d1_n[$name])){return false;}
+		else{$this->doPush($d1_v);}
+	}
+	public function change($d1_v){
+		if($this->np===null){return false;}
+		$name=$d1_v[$this->np];
+		if(isset($this->d1_n[$name])){$this->doChange($d1_v);}
+		else{return false;}
+	}
+	public function write($d1_v){
+		if($this->np===null){$this->doPush($d1_v);return;}
+		$name=$d1_v[$this->np];
+		if(isset($this->d1_n[$name])){$this->doChange($d1_v);}
+		else{$this->doPush($d1_v);}
+	}
+	public function doPush($d1_v){//内容配列からノードを生成、名前→ノード配列とヒープ本体に追加する
+		$node=new binaryHeapNode($d1_v,$this->kp,$this->np);
+		if($this->np!==null){$this->d1_n[$node->getName()]=$node;}
+		$this->heap->push($node);
+	}
+	public function doChange($d1_v){//内容配列で同名ノードの内容を上書き
+		$name=$d1_v[$this->np];
+		$this->d1_n[$name]->setValue($d1_v);
+		$this->heap->prioritize($this->d1_n[$name],$d1_v[$this->kp]);
+	}
+	public function rename($old,$new){//名前で指定したノードの名前だけを変更
+		if($this->np===null){return false;}
+		if(!array_key_exists($old,$this->d1_n)){return false;}
+		if(array_key_exists($new,$this->d1_n)){return false;}
+		$this->d1_n[$old]=$this->d1_n[$new];
+		unset($this->d1_n[$old]);
+		$this->d1_n[$new]->setName($new);
+		return true;
+	}
+	public function top(){//最優先ノードの内容を出力
+		return $this->heap->top()->getValue();
+	}
+	public function pop(){//最優先ノードの内容を出力して削除
+		$node=$this->heap->pop();
+		unset($this->d1_n[$node->getName()]);
+		return $node->getValue();
+	}
+	protected function doDelete($name,$node){//deleteとspliceの共通処理
+		$this->heap->delete($node);
+		unset($this->d1_n[$name]);
+	}
+	public function delete($name){//名前で指定したノードを削除
+		if($this->np===null){return false;}
+		if(!array_key_exists($name,$this->d1_n)){return false;}
+		$this->doDelete($name,$this->d1_n[$name]);
+	}
+	public function splice($name){//名前で指定したノードの内容を出力して削除
+		if($this->np===null){return false;}
+		if(!array_key_exists($name,$this->d1_n)){return false;}
+		$node=$this->d1_n[$name];//出力内容の退避
+		$this->doDelete($name,$node);
+		return $node->getValue;
+	}
+	public function prioritize($name,$new){//
+		if($this->np===null){return false;}
+		if(!array_key_exists($name,$this->d1_n)){return false;}
+		$this->heap->prioritize($this->d1_n[$name],$new);
+	}
+	public function count():int{
+		return $this->heap->count();
+	}
+	public function getIterator():Traversable {
+		return new ArrayIterator($this->d1_n);
+	}
+	public function getHeap(){
+		return $this->heap;
+	}
+	public function merge(self $obj){
+		$otln=$obj->count();
+		for($i1=0;$i1<$otln;$i1++){
+			$this->push($obj->pop());
+		}
+	}
+	public function getList(){//名前→内容配列を出力する
+		$d2_rt=array();
+		foreach($this->d1_n as $key=>$node){
+			$d2_rt[$key]=$node->getValue();
+		}
+		return $d2_rt;
+	}
+
+
+}
+
+// $test=new binaryHeapObj(0);
+// $test->obj_test_method();
+
+//さあテストだ。
+// $testobj=new binaryHeap(1,0,0);
+// foreach($testinput as $fe){
+// 	$testobj->push($fe);
+// }
+// foreach($testdiff as $fe){
+// 	$testobj->prioritize($fe[0],$fe[1]);
+// }
+// foreach($testoutput as $fe){
+// 	print_r($testobj->pop());
+// }
+//どうにか成立。操作側では、入出力はノードで、内部処理は番号で、それぞれ指定することに統一したのが効いたか。だいぶ混乱少なかった。
+
+//次、二項ヒープ(binomial heap)。マージできるのが特徴なので、他のインスタンスと統合するメソッドも用意する。
+//https://ja.wikipedia.org/wiki/%E4%BA%8C%E9%A0%85%E3%83%92%E3%83%BC%E3%83%97
+
+//というわけで、まずは個々の要素用のクラスを作る。
+//内容、優先度位置、名前位置=nullで生成。
+class binomialHeapNode extends heapNode{
+	public $degree;//次数　直接操作のみ　常に、0から次数―1までの次数個の子を持つ
+	public $parent;//親ノード　直接操作のみ
+	public $child;//子ノード配列　直接操作のみ　[0]には0次の、[1]には1次の子ノードが入る
+	protected function setup(){
+		$this->degree=0;
+		$this->child=array();
+	}
+
+}
+//んで、オブジェクト操作部分を作成。
+class binomialHeapObj implements Iterator,countable{
+	protected $cn;//要素数
+	protected $R;//全ての親ノード　例外的に、子に空きができる
+	//protected $rule;//0なら優先度が低いほど優先、1なら優先度が高いほど優先
+	protected $itr;//Iterator用のスタック
+	protected $itrn;//Iterator用のカウント変数
+	public $shell;//対応するbinomialHeapオブジェクト
+	protected function setup(){
+		$this->cn=0;
+		$this->R=new binomialHeapNode(array(0),0);
+		$this->R->parent=$this->R;
+		$this->R->belong=$this;
+	}
+	public function __construct(protected $rule=0){
+		$this->setup();
+	}
+	protected function compare(binomialHeapNode $node1,binomialHeapNode $node2){//ノードで比較、tn1の方が優先なら1、tn2の方が優先なら-1
+		$kn1=$node1->getKey();
+		$kn2=$node2->getKey();
+		//echo "compare $tn1:$kn1 , $tn2:$kn2\n";
+
+		if($this->rule==0){
+			if($kn1<$kn2){return 1;}
+			elseif($kn1>$kn2){return -1;}
+			elseif($kn1==$kn2){return 0;}
+		}else{
+			if($kn1<$kn2){return -1;}
+			elseif($kn1>$kn2){return 1;}
+			elseif($kn1==$kn2){return 0;}
+		}
+	}
+	protected function swapToUpper(binomialHeapNode $node):binomialHeapNode{//ノード指定で親と位置を交換して、交換後のノードを返す　すべての親とは交換しない　
+		//うかつなことをやると、二つが親子関係だった場合に、二回入れ替えてしまってバグったりする。
+		//構造を保ったまま内容を入れ替える方が楽なんだけど、今回の構造だと名前→ノード配列が外にあるので、こっちだけではできなかったりする。
+		//それでも、そっちまで動かして内容のみ交換の方がなにかと安定っぽいか？
+		//親との交換のみで構造交換と、外オブジェクトまで使って内容のみ交換と。両方作って比較してみるべきか。
+		//内容交換の方は、名前管理オブジェクトの方のメソッドとしてこっちから呼び出す感じか。
+		//echo"swap $tn1:$tn2\n";
+		$parent=$node->parent;
+		if($node->parent==$this->R){return false;}
+
+		//内容交換パターン　若干早い気がする程度なので、余計なことはしなくていいかなー。
+		// if($this->shell!==null){
+		// 	$this->shell->swapNode($node->getName(),$parent->getName());
+		// }
+		// list($parent->name,$node->name)=array($node->name,$parent->name);
+		// list($parent->key,$node->key)=array($node->key,$parent->key);
+		// list($parent->value,$node->value)=array($node->value,$parent->value);
+		// return $parent;
+
+		$parent->parent->child[$parent->degree]=$node;//親の親からの参照を修正
+		foreach($node->child as $fenode){//対象の子からの参照を修正
+			$fenode->parent=$parent;
+		}
+		foreach($parent->child as $fenode){//対象を含む、親の子からの参照を修正
+			$fenode->parent=$node;
+		}
+		$parent->child[$node->degree]=$parent;//親から対象への参照を修正
+
+		//対象と親の構造情報を交換
+		list($node->child,$parent->child)=array($parent->child,$node->child);
+		list($node->parent,$parent->parent)=array($parent->parent,$node->parent);
+		list($node->degree,$parent->degree)=array($parent->degree,$node->degree);
+		return $node;
+	}
+	protected function alignUp(binomialHeapNode $node):binomialHeapNode{//ノード指定で、親より優先度が高いなら親と交換、再帰的に繰り返して交換後のノードを返す
+		if($node->parent==$this->R){return $node;}
+		if($this->compare($node,$node->parent)>0){
+			$node=$this->swapToUpper($node);
+			return $this->alignUp($node);
+		}else{
+			return $node;
+		}
+	}
+	protected function alignDown(binomialHeapNode $node):binomialHeapNode{//ノード指定で、より優先度の高い子と比較して優先度が低いなら交換、再帰的に繰り返して交換後のノードを返す
+		if($node->degree==0){return $node;}
+		$z_max=$node->child[0];
+		for($i1=1;$i1<=$node->degree-1;$i1++){
+			if($this->compare($node->child[$i1],$z_max)>0){
+				$z_max=$node->child[$i1];
+			}
+		}
+		if($this->compare($node,$z_max)<0){
+			$this->swapToUpper($z_max);
+			return $this->alignDown($z_max);
+		}else{
+			return $node;
+		}
+	}
+	protected function extend(binomialHeapNode $child,binomialHeapNode $parent){//親無しのchildをparentの子に加える
+		//childの親からの参照は操作しない
+		$parent->child[$parent->degree]=$child;
+		$parent->degree++;
+		$child->parent=$parent;
+	}
+	public function push(binomialHeapNode $node){//ノードで0次要素をヒープに追加する
+		$this->cn++;
+		$this->add($node);
+	}
+	protected function add(binomialHeapNode $node):int{//親無しのノードをルートに追加する　最終的に追加された次数を返す
+		//nodeの親からの参照は操作しない。先に消しておくこと
+		$dn=$node->degree;
+		$node->parent=$this->R;
+		while(true){
+			if(array_key_exists($dn,$this->R->child) and $this->R->child[$dn]!==null){
+				$terget=$this->R->child[$dn];
+				$this->R->child[$dn]=null;
+				if($this->compare($node,$terget)>0){
+					$this->extend($terget,$node);
+					$dn++;
+					continue;
+				}else{
+					$this->extend($node,$terget);
+					$dn++;
+					$node=$terget;
+					continue;
+				}
+			}else{
+				$this->R->child[$dn]=$node;
+				return $dn;
+			}
+		}
+	}
+	public function prioritize(binomialHeapNode $node,$new){//対象ノードの優先度を新しい値に変更して、優先度に基づいた位置に移動させる
+		$node->setKey($new);
+		$this->alignDown($this->alignUp($node));
+	}
+	public function top():binomialHeapNode{//最優先ノードを取得する
+		if($this->cn==0){return false;}
+
+		$rtobj=null;
+		foreach($this->R->child as $feobj){//全ての親の子の中から、最優先のものを探す
+			if($rtobj===null){
+				$rtobj=$feobj;
+			}elseif($feobj===null){
+			}elseif($this->compare($rtobj,$feobj)<0){
+				$rtobj=$feobj;
+			}
+		}
+		return $rtobj;
+	}
+	protected function deleteRoot(binomialHeapNode $node){//指定されたルートノードを削除する
+		if($node->parent!=$this->R){return false;}
+
+		$this->R->child[$node->degree]=null;
+
+		for($i1=$node->degree-1;$i1>=0;$i1--){
+			$this->add($node->child[$i1]);
+		}
+	}
+	public function pop():binomialHeapNode{//最優先ノードを取り出して削除する
+		$rtobj=$this->top();
+		$this->deleteRoot($rtobj);
+		$rtobj->parent=null;
+		$rtobj->child=array();
+		$rtobj->degree=0;
+		$this->cn--;
+		return $rtobj;
+	}
+	public function delete(binomialHeapNode $node){//ノード指定で削除する
+		while($node->parent!=$this->R){
+			$node=$this->swapToUpper($node);
+		}
+		$this->deleteRoot($node);
+	}
+	public function splice(binomialHeapNode $node):binomialHeapNode{//ノード指定で取り出して削除する
+		$rtobj=$node;
+		$this->delete($node);
+		$rtobj->parent=null;
+		$rtobj->child=array();
+		$rtobj->degree=0;
+		return $rtobj;
+	}
+	public function inThis(binomialHeapNode $node):bool{//このオブジェクトの全ての親に繋がるノードかどうか判定する
+		$obj=$node;
+		while($obj!=$obj->parent){
+			$obj=$obj->parent;
+			if(!is_a($obj,"binomialHeapNode")){return false;}
+		}
+		if($obj==$this->R){return true;}
+		else{return false;}
+	}
+	public function count():int{//要素数を返す
+		return $this->cn;
+	}
+
+	//Iteratorインターフェイス
+		public function current(): mixed{
+			return $this->itr->top();
+		}
+		public function key(): mixed{
+			return $this->itrn;
+		}
+		public function next(): void{
+			$otobj=$this->itr->pop();
+			for($i2=$otobj->degree-1;$i2>=0;$i2--){
+				$this->itr->push($otobj->child[$i2]);
+			}
+			$this->itrn++;
+		}
+		public function rewind(): void{
+			$this->itr=new SplStack();
+			$this->itrn=0;
+			if($this->count()==0){return;}
+			$otar=array_reverse(array_keys($this->R->child));
+			foreach($otar as $fen){
+				if($this->R->child[$fen]===null){continue;}
+				$this->itr->push($this->R->child[$fen]);
+			}
+		}
+		public function valid(): bool{
+			return $this->itr->count()>0;
+		}
+	//
+	public function clear(){//ヒープを削除する
+		$this->setup();
+	}
+	public function getRoot():binomialHeapNode{
+		return $this->R;
+	}
+	public function merge(self $heap){//同クラスの対象をこっちにマージする
+		$terget=$heap->getRoot();
+		$otar=array_reverse(array_keys($terget->child));
+		foreach($otar as $fen){
+			if($terget->child[$fen]===null){continue;}
+			$this->add($terget->child[$fen]);
+		}
+		$this->cn+=$heap->count();
+	}
+	public function printValues(){//各ノードの内容配列を表示する
+		foreach($this as $node){
+			print_r($node->getValue());
+		}
+	}
+	public function printNode($node){
+		echo "  ".$node->getName()."\n";
+		echo $node->parent->getName().":";
+		foreach($node->child as $fenode){
+			echo $fenode->getName()." ";
+		}
+		echo"<br>\n";
+	}
+	public function printNodes(){
+		$otln=0;
+		foreach(array_keys($this->R->child) as $fen){
+			if($this->R->child[$fen]===null){continue;}
+			echo $fen.":".$this->R->child[$fen]->getName()." ";
+		}
+		echo"\n";
+		foreach($this as $node){
+			$otln++;
+			if($otln>$this->cn*2){break;}//バグで無限ループすることがあるので、デバッグ用のこいつは強制停止するようにする。
+			$this->printNode($node);
+		}
+	}
+	public function obj_test_echo(){
+		foreach($this as $node){
+			$otar=$node->getValue();
+			echo "(".$otar[0].",".$otar[1].",".$otar[2].") ";
+		}
+		echo"<br>\n";
+	}
+
+	public function obj_test_method(){//各メソッドがちゃんと動いているかのテスト
+		$a___=new binomialHeapNode(array("a---",23,1),1,0);
+		$c___=new binomialHeapNode(array("c---",20,1),1,0);
+		$c0__=new binomialHeapNode(array("c0--",10,1),1,0);
+		$c1__=new binomialHeapNode(array("c1--",30,1),1,0);
+		$c10_=new binomialHeapNode(array("c10-",25,1),1,0);
+		$this->R->child[0]=$a___;
+		$a___->parent=$this->R;
+		$this->R->child[1]=null;
+		$this->R->child[2]=$c___;
+		$c___->parent=$this->R;
+		$c___->degree=2;
+		$this->R->child[2]->child[0]=$c0__;
+		$c0__->parent=$c___;
+		$this->R->child[2]->child[1]=$c1__;
+		$c1__->parent=$c___;
+		$c1__->degree=1;
+		$this->R->child[2]->child[1]->child[0]=$c10_;
+		$c10_->parent=$c1__;
+		$this->cn=5;
+		$this->obj_test_echo();
+		$this->printNodes();
+		echo"<br>\n";
+		{//compare
+			// echo"test compare\n";
+			// echo $this->compare($this->R->child[0],$this->R->child[2])."\n";
+			// echo $this->compare($this->R->child[0],$this->R->child[2]->child[0])."\n";
+			// echo $this->compare($this->R->child[2]->child[1],$this->R->child[2])."\n";
+			// echo $this->compare($this->R->child[0],$this->R->child[2]->child[1]->child[0])."\n";
+		}
+		{//swapToUpper
+			// $this->swapToUpper($c1__);
+			// //$this->obj_test_echo();
+			// $this->printNodes();
+		}
+		{//alignUp
+			// echo"test alignUp\n";
+			// $this->alignUp($c10_);
+			// $this->obj_test_echo();
+			// $this->printNodes();
+		}
+		{//alignDown
+			// echo"test alignDown\n";
+			// $this->alignDown($c___);
+			// $this->obj_test_echo();
+			// $this->printNodes();
+		}
+		{//push (add,extend)
+			// $this->push(new binomialHeapNode(array("n---",18,1),1,0));
+			// $this->obj_test_echo();
+			// $this->printNodes();
+		}
+		{//pop (top,deleteRoot)
+			// $this->pop();
+			// $this->obj_test_echo();
+			// $this->printNodes();
+		}
+
+	}
+
+}
+// $test=new binomialHeapObj();
+// $test->obj_test_method();
+
+
+//それから、オブジェクト管理部分を作成。
+//優先度位置、名前位置=null、rule=0：0なら昇順、1なら降順
+class binomialHeap implements IteratorAggregate,countable{
+	protected $cn;//要素数
+	protected $d1_n;//名前→ノード配列
+	protected $heap;//binaryHeapObjオブジェクト
+	//protected $kp;//内容配列における優先度の位置
+	//protected $np;//内容配列における名前の位置
+	//protected $rule;//0なら優先度が低いほど優先、1なら優先度が高いほど優先
+	protected function setup(){
+		$this->d1_n=array();
+		$this->heap=new binomialHeapObj($this->rule);
+		$this->heap->shell=$this;//ヒープオブジェクトからこちらを認識できるようにしておく
+	}
+	public function __construct(protected $kp,protected $np=null,protected $rule=0){
+		$this->setup();
+	}
+	public function swapNode($name1,$name2){
+		if($this->name_exists($name1) and $this->name_exists($name2)){
+			list($this->d1_n[$name1],$this->d1_n[$name2])=array($this->d1_n[$name2],$this->d1_n[$name1]);
+		}
+	}
+	public function push($d1_v){
+		if($this->np===null){$this->doPush($d1_v);return;}
+		$name=$d1_v[$this->np];
+		if(isset($this->d1_n[$name])){return false;}
+		else{$this->doPush($d1_v);}
+	}
+	public function change($d1_v){
+		if($this->np===null){return false;}
+		$name=$d1_v[$this->np];
+		if(isset($this->d1_n[$name])){$this->doChange($d1_v);}
+		else{return false;}
+	}
+	public function write($d1_v){
+		if($this->np===null){$this->doPush($d1_v);return;}
+		$name=$d1_v[$this->np];
+		if(isset($this->d1_n[$name])){$this->doChange($d1_v);}
+		else{$this->doPush($d1_v);}
+	}
+	public function doPush($d1_v){//内容配列からノードを生成、名前→ノード配列とヒープ本体に追加する
+		$node=new binomialheapNode($d1_v,$this->kp,$this->np);
+		if($this->np!==null){$this->d1_n[$node->getName()]=$node;}
+		$this->heap->push($node);
+	}
+	public function doChange($d1_v){//内容配列で同名ノードの内容を上書き
+		$name=$d1_v[$this->np];
+		$this->d1_n[$name]->setValue($d1_v);
+		$this->heap->prioritize($this->d1_n[$name],$d1_v[$this->kp]);
+	}
+	public function rename($old,$new){//名前で指定したノードの名前だけを変更
+		if(!$this->name_exists($old)){return false;}
+		if($this->name_exists($new)){return false;}
+		$this->d1_n[$old]=$this->d1_n[$new];
+		unset($this->d1_n[$old]);
+		$this->d1_n[$new]->setName($new);
+		return true;
+	}
+	public function top(){//最優先ノードの内容を出力
+		return $this->heap->top()->getValue();
+	}
+	public function pop(){//最優先ノードの内容を出力して削除
+		$node=$this->heap->pop();
+		unset($this->d1_n[$node->getName()]);
+		return $node->getValue();
+	}
+	protected function doDelete($name,$node){//deleteとspliceの共通処理
+		$this->heap->delete($node);
+		unset($this->d1_n[$name]);
+	}
+	public function name_exists($name):bool{//名前在りルール、かつ、その名前が存在するならtrue
+		if($this->np===null){return false;}
+		return array_key_exists($name,$this->d1_n);
+	}
+	public function delete($name){//名前で指定したノードを削除
+		if(!$this->name_exists($name)){return false;}
+		$this->doDelete($name,$this->d1_n[$name]);
+	}
+	public function splice($name){//名前で指定したノードの内容を出力して削除
+		if(!$this->name_exists($name)){return false;}
+		$node=$this->d1_n[$name];//出力内容の退避
+		$this->doDelete($name,$node);
+		return $node->getValue;
+	}
+	public function prioritize($name,$new){//
+		if(!$this->name_exists($name)){return false;}
+		$this->heap->prioritize($this->d1_n[$name],$new);
+	}
+	public function count():int{
+		return $this->heap->count();
+	}
+	public function getIterator():Traversable {
+		return new ArrayIterator($this->d1_n);
+	}
+	public function getHeap(){
+		return $this->heap;
+	}
+	public function merge(self $obj){//名前被りは一切考慮していない
+		if($this->np!==null){
+			foreach($obj as $name=>$node){
+				$this->d1_n[$name]=$node;
+			}
+		}
+		$this->heap->merge($obj->getHeap());
+	}
+	public function getList(){//名前→内容配列を出力する
+		$d2_rt=array();
+		foreach($this->d1_n as $key=>$node){
+			$d2_rt[$key]=$node->getValue();
+		}
+		return $d2_rt;
+	}
+
+
+}
+
+
+//次、フィボナッチヒープ(Fibonacci heap)。優先度上昇処理が速いのが特徴らしい。
+//https://ja.wikipedia.org/wiki/%E3%83%95%E3%82%A3%E3%83%9C%E3%83%8A%E3%83%83%E3%83%81%E3%83%92%E3%83%BC%E3%83%97
+
+//というわけで、まずは個々の要素用のクラスを作る。
+//内容、優先度位置、名前位置=nullで生成。
+class fibonacciHeapNode extends heapNode{
+	public $degree;//子リンクの要素数
+	public $damaged=false;//ダメージがあるならtrue
+	public $parent;//親ノード　直接操作のみ
+	public $child;//最優先子ノード配列
+	public $next;//弟ノード
+	public $prev;//兄ノード
+	protected function setup(){
+		$this->degree=0;
+		$this->next=$this;
+		$this->prev=$this;
+	}
+}
+//んで、オブジェクト操作部分を作成。
+class fibonacciHeapObj implements Iterator,countable{
+	protected $cn;//要素数
+	protected $R;//全ての親ノード
+	//protected $rule;//0なら優先度が低いほど優先、1なら優先度が高いほど優先
+	protected $itr;//Iterator用のスタック
+	protected $itrn;//Iterator用のカウント変数
+	public $shell;//対応するfibonacciHeapオブジェクト
+	protected $d1_m;//orgaize時に一旦整列させるための配列
+	protected function setup(){
+		$this->cn=0;
+		$this->R=new fibonacciHeapNode(array(0,"ROOT"),0,1);//全ての親の名前はshellからは参照されないがデバッグ的に必要
+		$this->R->parent=$this->R;
+		$this->R->belong=$this;
+		$this->d1_m=array();
+	}
+	public function __construct(protected $rule=0){
+		$this->setup();
+	}
+	protected function compare_n(int|float $kn1,int|float $kn2){//prioritizeの判別の都合で作った。compareの内部としては使っていない(多少なりとも遅くなる)
+		if($kn1==$kn2){return 0;}
+		if($this->rule==0){
+			if($kn1<$kn2){return 1;}
+			elseif($kn1>$kn2){return -1;}
+		}else{
+			if($kn1<$kn2){return -1;}
+			elseif($kn1>$kn2){return 1;}
+		}
+	}
+	protected function compare(fibonacciHeapNode $node1,fibonacciHeapNode $node2){//ノードで比較、tn1の方が優先なら1、tn2の方が優先なら-1
+		$kn1=$node1->getKey();
+		$kn2=$node2->getKey();
+		//echo "compare $tn1:$kn1 , $tn2:$kn2\n";
+		if($kn1==$kn2){return 0;}
+		if($this->rule==0){
+			if($kn1<$kn2){return 1;}
+			elseif($kn1>$kn2){return -1;}
+		}else{
+			if($kn1<$kn2){return -1;}
+			elseif($kn1>$kn2){return 1;}
+		}
+	}
+	protected function setMaxChild(fibonacciHeapNode $parent){//対象の子リンクの最優先ノードを更新する　organizeまではしない
+		//echo"setMaxChild\n";
+		$first=$parent->child;
+		//$this->printNode($first);
+		if($first===null){return;}
+
+		$terget=$first;
+		$z_max=$terget;
+		while($terget->next!==$first){
+			$terget=$terget->next;
+			if($this->compare($z_max,$terget)<0){
+				$z_max=$terget;
+			}
+		}
+		$parent->child=$z_max;
+	}
+	protected function cutRoot(fibonacciHeapNode $node){//対象ノードを、親の子リンクから外す　親無しのノードだとエラー
+		// echo"cutRoot\n";
+		// $this->printNode($node);
+		if($node===$this->R){return;}
+
+		$parent=$node->parent;
+
+		if($node->next!==$node){//兄弟がいる場合、リンク切断処理が入る
+
+			if($parent->child===$node){//兄弟内での最優先ノードだった場合、最優先ノード更新処理が入る
+				$next=$node->next;//とりあえず子のひとつを抽出しておく
+			}else{
+				$next=false;
+			}
+
+			$node->prev->next=$node->next;
+			$node->next->prev=$node->prev;
+
+			$node->next=$node;
+			$node->prev=$node;
+
+			//リンク切断処理の後に、最優先ノード更新処理。逆だとそりゃ更新されないわ。
+			if($next){
+				$parent->child=$next;//対象が最優先ノードだったときのみ、親の子は変更される
+				$this->setMaxChild($parent);
+			}
+
+		}else{
+			if($parent===null){
+				$this->printNode($node);
+				$this->obj_test_echo();
+			}
+			$parent->child=null;//兄弟がいない場合、親の子は無くなる
+		}
+		$parent->degree--;
+		$node->parent=null;
+
+		if($parent->parent===$this->R){return;}//全ての親とルートノードにダメージ判定は無い
+		if($parent->parent===null){
+			echo"null error\n";
+			$this->printNode($node);
+			$this->printNode($node->next);
+			$this->printNode($node->prev);
+			$this->obj_test_echo();
+		}
+
+		if($parent->damaged){//親のダメージ次第で連鎖的に切断する
+			$this->cutRoot($parent);
+		}else{
+			$parent->damaged=true;
+		}
+
+	}
+	protected function linkRoot(fibonacciHeapNode $child,fibonacciHeapNode $parent=null){//childをparentの子リンクに追加する。childは単独ノードとは限らない　childの元の親からの参照には触れない
+		// echo"linkRoot\n";
+		if($child===$this->R){return;}
+		if($parent===null){$parent=$this->R;}
+		// $this->printNode($child);
+		// $this->printNode($parent);
+
+		$terget=$child;//兄弟全員分の親を変更する
+		$dn=0;//ついでに、加算される次数を数える
+		do{
+			$dn++;
+			$terget->parent=$parent;
+			$terget=$terget->next;
+			if($parent==$this->R){$terget->damaged=false;}//ルートノードになる際にダメージは無くなる
+		}while($terget!==$child);
+
+		if($parent->child===null){
+			$parent->child=$child;
+		}else{
+			list($child->prev,$parent->child->prev)=array($parent->child->prev,$child->prev);
+			$child->prev->next=$child;
+			$parent->child->prev->next=$parent->child;
+
+			if($this->compare($child,$parent->child)>0){
+				$parent->child=$child;
+			}
+		}
+
+		$parent->degree+=$dn;//親の次数を修正
+
+
+	}
+	protected function organize_rc(fibonacciHeapNode $node){//d1_mに、繰上り込みで統合する　最終的にd1_mに入ったノードを返す
+		// echo"organize_rc\n";
+		// $this->printNode($node);
+		// $this->printNodes();
+		
+		$dn=$node->degree;
+		// echo"dn=$dn\n";
+		//if($dn>$this->cn){exit();}//無限ループ強制終了用
+		if(array_key_exists($dn,$this->d1_m)){
+			// echo"hit\n";
+			// $this->printNode($this->d1_m[$dn]);
+			if($node===$this->R->child){//最優先ノードなら、同優先度だろうと何だろうと優先
+				$this->cutRoot($this->d1_m[$dn]);
+				$this->linkRoot($this->d1_m[$dn],$node);
+			}elseif($this->compare($node,$this->d1_m[$dn])>0){
+				$this->cutRoot($this->d1_m[$dn]);
+				$this->linkRoot($this->d1_m[$dn],$node);
+			}else{
+				$this->cutRoot($node);
+				$this->linkRoot($node,$this->d1_m[$dn]);
+				$node=$this->d1_m[$dn];
+			}
+			unset($this->d1_m[$dn]);
+			return $this->organize_rc($node);
+		}else{
+			//echo"no hit\n";
+			$this->d1_m[$dn]=$node;
+			return $node;
+		}
+
+	}
+	public function organize(){//ルートリンクの、次数が同じ木を統合する
+		//echo"organize\n";
+		$terget=$this->R->child;
+		//最優先ノードである、と言う前提に基づく。同優先度なら先にd1_mにセットされた方を根にする、と決めておけば、絶対にルートノードとして残る。
+		//->ダメだ、最優先ノードと統合された後に繰り上がると、最優先ノードの方が追加側になってしまう。そうなると誤動作だ。
+		//organize_rcのnodeが最優先ノードであった時点で、統合処理を別処理にしないと。
+
+		// $this->printNode($terget);
+		//$otln=0;
+		do{
+			//echo "otln=".$otln."\n";
+			//$this->printNode($terget);
+			//$otln++;
+			// if($otln>$this->cn*2){exit();}//無限ループ強制終了用
+			$next=$terget->next;
+			$this->organize_rc($terget);
+			// echo"rc end\n";
+			$terget=$next;
+			// $this->printNode($terget);
+			// $this->printNode($this->R->child);
+		}while($terget!==$this->R->child);
+
+		$this->d1_m=array();
+	}
+	public function push(fibonacciHeapNode $node){//ノードで0次要素をヒープに追加する
+		$this->cn++;
+		$this->linkRoot($node);
+	}
+	public function prioritize(fibonacciHeapNode $node,$new){//対象ノードの優先度を新しい値に変更して、必要に応じて親子関係を切断する
+		//echo"prioritize\n";
+		if($this->compare_n($new,$node->getKey())==0){
+			return;
+		}elseif($this->compare_n($new,$node->getKey())>0){
+			$this->priorityUp($node,$new);
+		}else{
+			$this->priorityDown($node,$new);
+		}
+	}
+	public function priorityUp(fibonacciHeapNode $node,$new){//対象ノードの優先度を上昇させ、親を超えていれば切り離す
+		$node->setKey($new);
+		if($node->parent!==$this->R and $this->compare($node,$node->parent)>0){//ルートノードなら親とは比較しない
+			$this->cutRoot($node);
+			$this->linkRoot($node);
+		}else{//親と切り離されなかった場合、子リンクの中での最優先ノードの変更の可能性があるので処理
+			if($this->compare($node,$node->parent->child)>0){
+				$node->parent->child=$node;
+			}
+		}
+	}
+	public function priorityDown(fibonacciHeapNode $node,$new){//対象ノードの優先度を減少させ、子を割っていれば切り離す
+		$node->setKey($new);
+		if($node->parent->child===$node){//最優先ノードだった場合、子リンクの中での最優先ノードの変更の可能性があるので処理
+			$this->setMaxChild($node->parent);
+		}
+		if($node->child!==null and $this->compare($node,$node->child)<0){//子が無いなら子とは比較しない
+			$this->linkRoot($node->child);
+			$node->child=null;
+			$node->degree=0;//linkRootは対象の親を操作しないので、こっちで色々やっておく
+		}
+	}
+	public function top():fibonacciHeapNode{//最優先ノードを取得する
+		//echo"top\n";
+		if($this->cn==0){return false;}
+		return $this->R->child;
+	}
+	protected function delete(fibonacciHeapNode $node){//指定されたノードを削除する
+		//echo"delete\n";
+		$this->cn--;//分岐の前に確実に要素数減少処理
+		$this->cutRoot($node);
+
+		if($node->child===null){return;}//対象に子があるとは限らない。
+
+		$this->linkRoot($node->child);
+		$node->child=null;
+	}
+	public function pop():fibonacciHeapNode{//最優先ノードを取り出して削除する
+		//echo"pop $this->cn\n";
+		//$this->obj_test_echo();
+		if($this->cn==0){return false;}
+		$this->organize();
+		//echo"pop organized\n";
+		//$this->printNodes();
+		$rtobj=$this->top();
+		$this->delete($rtobj);
+		return $rtobj;
+	}
+	public function splice(fibonacciHeapNode $node):fibonacciHeapNode{//ノード指定で取り出して削除する
+		$rtobj=$node;
+		$this->delete($node);
+		return $rtobj;
+	}
+	public function inThis(fibonacciHeapNode $node):bool{//このオブジェクトの全ての親に繋がるノードかどうか判定する
+		$obj=$node;
+		while($obj!=$obj->parent){
+			$obj=$obj->parent;
+			if(!is_a($obj,"fibonacciHeapNode")){return false;}
+		}
+		if($obj==$this->R){return true;}
+		else{return false;}
+	}
+	public function count():int{//要素数を返す
+		return $this->cn;
+	}
+
+	//Iteratorインターフェイス
+		public function current(): mixed{
+			return $this->itr->top();
+		}
+		public function key(): mixed{
+			return $this->itrn;
+		}
+		public function next(): void{
+			$first=$this->itr->pop()->child;
+			if($first===null){return;}
+
+			$terget=$first;
+			do{
+				$terget=$terget->prev;
+				$this->itr->push($terget);
+			}while($terget!==$first);
+			$this->itrn++;
+		}
+		public function rewind(): void{
+			$this->itr=new SplStack();
+			$this->itrn=0;
+			$this->itr->push($this->R);
+			$this->next();
+		}
+		public function valid(): bool{
+			return $this->itr->count()>0;
+		}
+	//
+	public function clear(){//ヒープを削除する
+		$this->setup();
+	}
+	public function getRoot():fibonacciHeapNode{
+		return $this->R;
+	}
+	public function merge(self $heap){//同クラスの対象をこっちにマージする
+		$this->linkRoot($heap->getRoot()->child);
+		$this->cn+=$heap->count();
+		$heap->clear();
+	}
+	public function printValues(){//各ノードの内容配列を表示する
+		foreach($this as $node){
+			print_r($node->getValue());
+		}
+	}
+	public function printNode(fibonacciHeapNode $node){
+		echo "  ".$node->getName()." (".$node->degree.") ";
+		echo $node->next->getName().":";
+		echo $node->prev->getName()."    ";
+		echo $node->parent?->getName().":";
+		echo $node->child?->getName()." ";//nullsafe演算子「?->」によって、子が存在しなくともエラーではなくnullが返る
+		echo"<br>\n";
+	}
+	public function printNodes(){
+		echo"printNodes(".$this->cn.")\n";
+		$otln=0;
+		foreach($this as $node){
+			$otln++;
+			if($otln>$this->cn*2){break;}//バグで無限ループすることがあるので、デバッグ用のこいつは強制停止するようにする。
+			$this->printNode($node);
+		}
+	}
+	public function obj_test_echo(){
+		echo"obj_test_echo($this->cn)\n";
+		foreach($this as $node){
+			$otar=$node->getValue();
+			echo "(".$otar[0].",".$otar[1].",".$otar[2].") ";
+		}
+		echo"<br>\n";
+	}
+
+	public function obj_test_method(){//各メソッドがちゃんと動いているかのテスト
+		{//setup
+			$a___=new fibonacciHeapNode(array("a---",10,1),1,0);
+			$b___=new fibonacciHeapNode(array("b---",30,1),1,0);
+			$b0__=new fibonacciHeapNode(array("b0--",35,1),1,0);
+			$c___=new fibonacciHeapNode(array("c---",20,1),1,0);
+			$c0__=new fibonacciHeapNode(array("c0--",23,1),1,0);
+			$c1__=new fibonacciHeapNode(array("c1--",25,1),1,0);
+			$c10_=new fibonacciHeapNode(array("c10-",28,1),1,0);
+			$this->R->child=$a___;
+			$a___->parent=$this->R;
+			$a___->next=$b___;
+			$a___->prev=$c___;
+			$b___->parent=$this->R;
+			$b___->next=$c___;
+			$b___->prev=$a___;
+			$b___->child=$b0__;
+			$b___->degree=1;
+			$b0__->parent=$b___;
+			$c___->parent=$this->R;
+			$c___->next=$a___;
+			$c___->prev=$b___;
+			$c___->child=$c0__;
+			$c___->degree=2;
+			$c0__->parent=$c___;
+			$c0__->next=$c1__;
+			$c0__->prev=$c1__;
+			$c1__->parent=$c___;
+			$c1__->next=$c0__;
+			$c1__->prev=$c0__;
+			$c1__->child=$c10_;
+			$c1__->degree=1;
+			$c10_->parent=$c1__;
+			$this->cn=7;
+			$this->obj_test_echo();
+			$this->printNodes();
+			echo"<br>\n";
+		}
+		{//compare
+			// echo"test compare\n";
+			// echo $this->compare($a___,$b___)."\n";
+			// echo $this->compare($a___,$b0__)."\n";
+			// echo $this->compare($a___,$c___)."\n";
+			// echo $this->compare($b___,$c___)."\n";
+		}
+		{//cutRoot,linkRoot;
+			// echo "test cutRoot,linkRoot\n";
+			// $this->cutRoot($c1__);
+			// $this->obj_test_echo();
+			// $this->printNodes();
+			// $this->printNode($c1__);
+			// echo "test cutRoot,linkRoot\n";
+			// $this->linkRoot($c1__);
+			// $this->obj_test_echo();
+			// $this->printNodes();
+		}
+		{//organize
+			// echo"test organize\n";
+			// $this->organize();
+			// $this->obj_test_echo();
+			// $this->printNodes();
+		}
+		{//push,pop
+			// echo"\n****test push,pop (push)****\n\n";
+			// $test=new fibonacciHeapObj($this->rule);
+			// $c__t=new fibonacciHeapNode(array("c--t",20,1),1,0);
+			// $c0_t=new fibonacciHeapNode(array("c0-t",23,1),1,0);
+			// $c1_t=new fibonacciHeapNode(array("c1-t",25,1),1,0);
+			// $c10t=new fibonacciHeapNode(array("c10t",28,1),1,0);
+			// $test->push($c__t);
+			// $test->push($c0_t);
+			// $test->push($c1_t);
+			// $test->push($c10t);
+			// $test->printNodes();
+			// echo"\n****test push,pop (organize)****\n\n";
+			// $test->organize();
+			// $test->printNodes();
+			// echo"\n****test push,pop (pop)****\n\n";
+			// while($test->count()>0){
+			// 	$otnode=$test->pop();
+			// 	echo "poped\n";
+			// 	$test->printNode($otnode);
+			// 	echo"remain\n";
+			// 	$test->printNodes();
+			// }
+		}
+		{//prioritize
+			// echo"\n****test prioritize****\n\n";
+			// $this->prioritize($b___,3);
+			// $this->obj_test_echo();
+			// $this->printNodes();
+			// $this->prioritize($c10_,15);
+			// $this->obj_test_echo();
+			// $this->printNodes();
+			// $this->prioritize($c___,29);
+			// $this->obj_test_echo();
+			// $this->printNodes();
+		}
+
+	}
+
+}
+// $test=new fibonacciHeapObj();
+// $test->obj_test_method();
+// echo"\n****end of obj_test_method****\n\n";
+
+//それから、オブジェクト管理部分を作成。
+//優先度位置、名前位置=null、rule=0：0なら昇順、1なら降順
+class fibonacciHeap implements IteratorAggregate,countable{
+	protected $cn;//要素数
+	protected $d1_n;//名前→ノード配列
+	protected $heap;//binaryHeapObjオブジェクト
+	//protected $kp;//内容配列における優先度の位置
+	//protected $np;//内容配列における名前の位置
+	//protected $rule;//0なら優先度が低いほど優先、1なら優先度が高いほど優先
+	protected function setup(){
+		$this->d1_n=array();
+		$this->heap=new fibonacciHeapObj($this->rule);
+		$this->heap->shell=$this;//ヒープオブジェクトからこちらを認識できるようにしておく
+	}
+	public function __construct(protected $kp,protected $np=null,protected $rule=0){
+		$this->setup();
+	}
+	public function swapNode($name1,$name2){
+		if($this->name_exists($name1) and $this->name_exists($name2)){
+			list($this->d1_n[$name1],$this->d1_n[$name2])=array($this->d1_n[$name2],$this->d1_n[$name1]);
+		}
+	}
+	public function push($d1_v){
+		if($this->np===null){$this->doPush($d1_v);return;}
+		$name=$d1_v[$this->np];
+		if(isset($this->d1_n[$name])){return false;}
+		else{$this->doPush($d1_v);}
+	}
+	public function change($d1_v){
+		if($this->np===null){return false;}
+		$name=$d1_v[$this->np];
+		if(isset($this->d1_n[$name])){$this->doChange($d1_v);}
+		else{return false;}
+	}
+	public function write($d1_v){
+		if($this->np===null){$this->doPush($d1_v);return;}
+		$name=$d1_v[$this->np];
+		if(isset($this->d1_n[$name])){$this->doChange($d1_v);}
+		else{$this->doPush($d1_v);}
+	}
+	public function doPush($d1_v){//内容配列からノードを生成、名前→ノード配列とヒープ本体に追加する
+		$node=new fibonacciheapNode($d1_v,$this->kp,$this->np);
+		if($this->np!==null){$this->d1_n[$node->getName()]=$node;}
+		$this->heap->push($node);
+	}
+	public function doChange($d1_v){//内容配列で同名ノードの内容を上書き
+		$name=$d1_v[$this->np];
+		$this->d1_n[$name]->setValue($d1_v);
+		$this->heap->prioritize($this->d1_n[$name],$d1_v[$this->kp]);
+	}
+	public function rename($old,$new){//名前で指定したノードの名前だけを変更
+		if(!$this->name_exists($old)){return false;}
+		if($this->name_exists($new)){return false;}
+		$this->d1_n[$old]=$this->d1_n[$new];
+		unset($this->d1_n[$old]);
+		$this->d1_n[$new]->setName($new);
+		return true;
+	}
+	public function top(){//最優先ノードの内容を出力
+		return $this->heap->top()->getValue();
+	}
+	public function pop(){//最優先ノードの内容を出力して削除
+		$node=$this->heap->pop();
+		unset($this->d1_n[$node->getName()]);
+		return $node->getValue();
+	}
+	protected function doDelete($name,$node){//deleteとspliceの共通処理
+		$this->heap->delete($node);
+		unset($this->d1_n[$name]);
+	}
+	public function name_exists($name):bool{//名前在りルール、かつ、その名前が存在するならtrue
+		if($this->np===null){return false;}
+		return array_key_exists($name,$this->d1_n);
+	}
+	public function delete($name){//名前で指定したノードを削除
+		if(!$this->name_exists($name)){return false;}
+		$this->doDelete($name,$this->d1_n[$name]);
+	}
+	public function splice($name){//名前で指定したノードの内容を出力して削除
+		if(!$this->name_exists($name)){return false;}
+		$node=$this->d1_n[$name];//出力内容の退避
+		$this->doDelete($name,$node);
+		return $node->getValue;
+	}
+	public function prioritize($name,$new){//
+		if(!$this->name_exists($name)){return false;}
+		$this->heap->prioritize($this->d1_n[$name],$new);
+	}
+	public function count():int{
+		return $this->heap->count();
+	}
+	public function getIterator():Traversable {
+		return new ArrayIterator($this->d1_n);
+	}
+	public function getHeap(){
+		return $this->heap;
+	}
+	public function merge(self $obj){//名前被りは一切考慮していない
+		if($this->np!==null){
+			foreach($obj as $name=>$node){
+				$this->d1_n[$name]=$node;
+			}
+		}
+		$this->heap->merge($obj->getHeap());
+	}
+	public function getList(){//名前→内容配列を出力する
+		$d2_rt=array();
+		foreach($this->d1_n as $key=>$node){
+			$d2_rt[$key]=$node->getValue();
+		}
+		return $d2_rt;
+	}
+
+
+}
+
+
+
+{
+	$ln_b=100000;
+	$ln_k=100000;
+	$ln_e=100000;
+	$ln_c=100000;
+	$d2_t=array();
+	$d2_c=array();
+	for($i1=0;$i1<$ln_b;$i1++){
+		$d2_t[]=array(rand(0,$ln_k),rand(0,$ln_e));//$d2_t[名前]が、array(優先度,内容)となる。
+	}
+	$d2_tm=$d2_t;//変更後優先度を作るために、変更前の現在優先度をメモしておく。
+	for($i1=0;$i1<$ln_c;$i1++){
+		$otn=rand(0,$ln_b-1);
+		//$d2_tm[$otn][0]=floor(($d2_tm[$otn][0])*rand(1,10)/10);
+		$d2_tm[$otn][0]=$ln_k-floor(($ln_k-$d2_tm[$otn][0])*rand(1,10)/10);
+		$d2_c[]=array($otn,$d2_tm[$otn][0]);//$d2_c[番号]が、array(名前,新しい優先度)となる。
+	}
+	timeCheck();
+
+	$test1[0]=new binaryHeap(1,0,1);
+	$test1[1]=new binomialHeap(1,0,1);
+	$test1[2]=new fibonacciHeap(1,0,1);
+	timeCheck();
+	foreach($test1 as $key=>$test){
+		foreach($d2_t as $name=>$value){
+			$test->push(array($name,$value[0],$value[1]));
+		}
+		echo"checked push   ";
+		timeCheck();
+		foreach($d2_c as $name=>$value){
+			$test->prioritize($value[0],$value[1]);
+		}
+		echo"checked prioritize   ";
+		timeCheck();
+		while($test->count()>0){
+			$otar=$test->pop();
+			//echo"(".$otar[0].",".$otar[1].",".$otar[2].") ";
+		}
+		//echo"<br>\n";
+		echo"checked pop   ";
+		timeCheck();	
+		echo"<br>\n";
+	}
+	// echo"test of merge \n";
+	// $test2[0]=new binaryHeap(1,0,1);
+	// $test2[1]=new binomialHeap(1,0,1);
+	// $test2[2]=new fibonacciHeap(1,0,1);
+	// timeCheck();
+	// //print_r($test1);
+	// foreach($test1 as $key=>$test){
+	// 	foreach($d2_t as $name=>$value){
+	// 		if($name<$ln_b/2){
+	// 			$test->push(array($name,$value[0],$value[1]));
+	// 		}else{
+	// 			$test2[$key]->push(array($name,$value[0],$value[1]));
+	// 		}
+	// 	}
+	// 	timeCheck();
+	// 	echo"do merge\n";
+	// 	$test->merge($test2[$key]);
+	// 	timeCheck();	
+	// 	echo"<br>\n";
+	// }
+}
+
+// $ln_b=100000;
+// $ln_k=1000000;
+// $ln_e=1000000;
+// $ln_c=100000;
+// の条件で、
+// time_0<br>
+// checked push   time_0.307<br>
+// checked prioritize   time_0.289<br>
+// checked pop   time_0.959<br>
+// <br>
+// checked push   time_0.212<br>
+// checked prioritize   time_0.362<br>
+// checked pop   time_1.103<br>
+// <br>
+// checked push   time_0.215<br>
+// checked prioritize   time_0.109<br>
+// checked pop   time_2.508<br>
+// <br>
+// test of merge 
+// time_0<br>
+// time_0.258<br>
+// do merge
+// time_0.569<br>
+// <br>
+// time_0.231<br>
+// do merge
+// time_0.011<br>
+// <br>
+// time_0.22<br>
+// do merge
+// time_0.011<br>
+// <br>
+//
+//という結果。確かに、prioritizeは2倍前後～3倍近く速い。とはいえ、popが遅すぎるよなあ。
+//prioritizeをやたらやるような処理であれば、使う機会もあるか。
+//何度も数値を更新しつつ上位幾つかだけ取り出す処理とか、有りそうではあるよな。
+
+{
+	//メインとはずれるけど、compareってどう書くのが一番早いんだろうね？
+	//数をこなすのが前提の基本処理になるので、多少なりとも早い方がいいと思うんだけども。
+	// class comparetest{
+	// 	public function __construct(public $key){}
+	// }
+	// class comparetest0{//見た目にシンプルっぽいやつ
+	// 	public function compare(comparetest $obj1,comparetest $obj2){
+	// 		$kn1=$obj1->key;
+	// 		$kn2=$obj2->key;
+	// 		if($kn1==$kn2){return 0;}
+	// 		return $kn1>$kn2 ? 1:-1;
+	// 	}
+	// }
+	// class comparetest1{//参考演算子をif分岐に変えてみる
+	// 	public function compare(comparetest $obj1,comparetest $obj2){
+	// 		$kn1=$obj1->key;
+	// 		$kn2=$obj2->key;
+	// 		if($kn1==$kn2){return 0;}
+	// 		elseif($kn1>$kn2){return 1;}
+	// 		else{return -1;}
+	// 	}
+	// }
+	// class comparetest2{//一時変数を置かずにいちいちプロパティを読む
+	// 	public function compare(comparetest $obj1,comparetest $obj2){
+	// 		if($obj1->key==$obj2->key){return 0;}
+	// 		return $obj1->key>$obj2->key ? 1:-1;
+	// 	}
+	// }
+	// class comparetest3{//内部処理を別関数に入れる
+	// 	public function compare(comparetest $obj1,comparetest $obj2){
+	// 		return $this->compare_n($obj1->key,$obj2->key);
+	// 	}
+	// 	protected function compare_n(int $kn1,int $kn2){
+	// 		if($kn1==$kn2){return 0;}
+	// 		return $kn1>$kn2 ? 1:-1;
+
+	// 	} 
+	// }
+	// $ln_b=10000000;
+	// $test=array();
+	// $test[0]=new comparetest0;
+	// $test[1]=new comparetest1;
+	// $test[2]=new comparetest2;
+	// $test[3]=new comparetest3;
+	// timeCheck();
+	// for($i1=0;$i1<$ln_b;$i1++){
+	// 	new comparetest(rand(1,10));
+	// 	new comparetest(rand(1,10));
+	// }
+	// timeCheck();
+	// echo"\n";
+	// foreach($test as $feobj){
+	// 	for($i1=0;$i1<$ln_b;$i1++){
+	// 		$feobj->compare(new comparetest(rand(1,10)),new comparetest(rand(1,10)));
+	// 	}
+	// 	timeCheck();
+	// }
+	//ln_b=10000000で試した結果。
+	// time_2.023<br>
+	//
+	// time_2.636<br>
+	// time_2.584<br>
+	// time_2.665<br>
+	// time_2.994<br>
+	//
+	//if分岐が1割くらい早いと言うのと、やっぱ別関数は一気に遅くなるなあと言うのと。
+	//一時変数置いた方が多少なりとも早くはなってる。
+}
+
+//とりあえず、高速化で思いつくのは、単独ノードは親兄弟nullを前提にして、単独ノードの接続処理を別に作った方が速くなるかな、とか思ったりしたが。
+//それ以前に、これ、昇順verと降順verを別オブジェクトにして、shellで必要な方だけ作れば、compareメソッドが根本的に不要だな。
+//余計な呼び出しがない分は早くなるはずだ。
+//shellも名前有り無しで別に作るか？　むしろ、名前なしでshellを使う意味が無いので、名前有りのみで。
+//だと、フィボナッチヒープのみの話ではないな。
+
+?>
