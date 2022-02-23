@@ -1,0 +1,1031 @@
+namespace crast\heap\binary{//二部ヒープ本体定義
+	class node {
+		public $value;//内容
+		public $key;//優先度
+		public $name;//名前
+		public $tag;//二部ヒープのヒープ管理番号を入れる
+		//protected $kp;//内容配列における優先度の位置
+		//protected $np;//内容配列における名前の位置
+		protected function setup(){}
+		public function __construct($value,protected $kp,protected $np){
+			$this->setup();
+			$this->setValue($value);
+		}
+		public function getValue(){
+			return $this->value;
+		}
+		public function setValue($value){
+			$this->value=$value;
+			$this->key=$value[$this->kp];
+			$this->name=$value[$this->np];
+		}
+		public function getKey(){
+			return $this->key;
+		}
+		public function setKey($key){
+			$this->value[$this->kp]=$key;
+			$this->key=$key;
+		}
+		public function getName(){
+			return $this->name;
+		}
+		public function setName($name){
+			$this->value[$this->np]=$name;
+			$this->name=$name;
+		}
+	}
+	abstract class common implements \IteratorAggregate,\countable{//昇順・降順問わない共通部分を実装する抽象クラス
+		protected $cn;//要素数
+		protected $d1_t;//番号ごとに対応するノードを格納する配列
+		protected function setup(){
+			$this->cn=0;
+			$this->d1_t=array();
+		}
+		public function __construct(){
+			$this->setup();
+		}
+		protected function swap(int $tn1,int $tn2){//番号指定でノード二つを交換する
+			//echo"swap $tn1:$tn2\n";
+			list($this->d1_t[$tn1],$this->d1_t[$tn2])=array($this->d1_t[$tn2],$this->d1_t[$tn1]);
+			$this->d1_t[$tn1]->tag=$tn1;
+			$this->d1_t[$tn2]->tag=$tn2;
+		}
+		abstract protected function alignUp(int $tn):int;//二部ヒープだと、このふたつ以外にcompareしないのね、意外と少ない
+		abstract protected function alignDown(int $tn):int;
+		public function push(namespace\node $node):int{//ノードで要素を追加する　一応、追加後の位置を返す
+			$this->cn++;
+			$this->d1_t[$this->cn]=$node;
+			$node->tag=$this->cn;
+			return $this->alignDown($this->alignUp($this->cn));
+		}
+		public function prioritize(namespace\node $node,$new):int{//対象ノードの優先度を新しい値に変更して、優先度に基づいた位置に移動させる　一応、移動後の位置を返す
+			$node->setKey($new);
+			return $this->alignDown($this->alignUp($node->tag));
+		}
+		public function delete(namespace\node $node){//ノード指定で削除する
+			$tn=$node->tag;
+			if($tn==$this->cn){
+				unset($this->d1_t[$tn]);
+				$this->cn--;
+			}else{
+				$this->d1_t[$tn]=$this->d1_t[$this->cn];
+				$this->d1_t[$tn]->tag=$tn;//swapメソッド使わないので、tagの再設定もする
+				unset($this->d1_t[$this->cn]);
+				$this->cn--;
+				$this->alignDown($this->alignUp($tn));
+			}
+		}
+		public function splice(namespace\node $node):namespace\node{//ノード指定で取り出して削除する
+			$this->delete($node);
+			return $node;
+		}
+		public function pop():namespace\node{//最優先ノードを取り出して削除する
+			return $this->splice($this->d1_t[1]);
+		}
+		public function top():namespace\node{//最優先ノードを取得する
+			return $this->d1_t[1];
+		}
+		public function count():int{//要素数を返す
+			return $this->cn;
+		}
+		public function getIterator():\Traversable {//この辺も全部グローバル名前空間指定要るのか、まあ当たり前か。
+			return new \ArrayIterator($this->d1_t);
+		}
+		public function clear(){//ヒープを削除する
+			$this->setup();
+		}
+		public function merge(self $heap){//同クラスの対象をこっちにマージする
+			$otln=$heap->count;
+			for($i1=0;$i1<$otln;$i1++){
+				$this->push($heap->pop());
+			}
+		}
+		public function getTree(){//ツリー本体を出力する
+			return $this->d1_t;
+		}
+	}
+	class ascending extends namespace\common{//昇順仕様　優先度の数値が小さい方が優先
+		protected function alignUp(int $tn):int{//番号指定で、親より優先度が高いなら親と交換、再帰的に繰り返して交換後の番号を返す
+			if($tn<2){return $tn;}
+			$tn2=floor($tn/2);
+			if($this->d1_t[$tn]->key >= $this->d1_t[$tn2]->key){return $tn;}//compare相当
+
+			list($this->d1_t[$tn],$this->d1_t[$tn2])=array($this->d1_t[$tn2],$this->d1_t[$tn]);//swap相当
+			$this->d1_t[$tn]->tag=$tn;
+			$this->d1_t[$tn2]->tag=$tn2;
+
+			return $this->alignUp($tn2);
+		}
+		protected function alignDown(int $tn):int{//番号指定で、より優先度の高い子と比較して優先度が低いなら交換、再帰的に繰り返して交換後の番号を返す
+			if($tn*2>$this->cn){return $tn;}
+			elseif($tn*2==$this->cn){$tn2=$tn*2;}
+			else{
+				if($this->d1_t[$tn*2]->key > $this->d1_t[$tn*2+1]->key){$tn2=$tn*2+1;}//compare相当
+				else{$tn2=$tn*2;}
+			}
+			if($this->d1_t[$tn]->key <= $this->d1_t[$tn2]->key){return $tn;}//compare相当
+
+			list($this->d1_t[$tn],$this->d1_t[$tn2])=array($this->d1_t[$tn2],$this->d1_t[$tn]);//swap相当
+			$this->d1_t[$tn]->tag=$tn;
+			$this->d1_t[$tn2]->tag=$tn2;
+
+			return $this->alignDown($tn2);
+		}
+	}
+	class descending extends namespace\common{//降順仕様　優先度の数値が大きい方が優先
+		protected function alignUp(int $tn):int{//番号指定で、親より優先度が高いなら親と交換、再帰的に繰り返して交換後の番号を返す
+			if($tn<2){return $tn;}
+			$tn2=floor($tn/2);
+			if($this->d1_t[$tn]->key <= $this->d1_t[$tn2]->key){return $tn;}//compare相当
+
+			list($this->d1_t[$tn],$this->d1_t[$tn2])=array($this->d1_t[$tn2],$this->d1_t[$tn]);//swap相当
+			$this->d1_t[$tn]->tag=$tn;
+			$this->d1_t[$tn2]->tag=$tn2;
+
+			return $this->alignUp($tn2);
+		}
+		protected function alignDown(int $tn):int{//番号指定で、より優先度の高い子と比較して優先度が低いなら交換、再帰的に繰り返して交換後の番号を返す
+			if($tn*2>$this->cn){return $tn;}
+			elseif($tn*2==$this->cn){$tn2=$tn*2;}
+			else{
+				if($this->d1_t[$tn*2]->key < $this->d1_t[$tn*2+1]->key){$tn2=$tn*2+1;}//compare相当
+				else{$tn2=$tn*2;}
+			}
+			if($this->d1_t[$tn]->key >= $this->d1_t[$tn2]->key){return $tn;}//compare相当
+
+			list($this->d1_t[$tn],$this->d1_t[$tn2])=array($this->d1_t[$tn2],$this->d1_t[$tn]);//swap相当
+			$this->d1_t[$tn]->tag=$tn;
+			$this->d1_t[$tn2]->tag=$tn2;
+
+			return $this->alignDown($tn2);
+		}
+	}
+}
+namespace crast\heap\binomial{//二項ヒープ本体定義
+	class node{
+		public $value;//内容
+		public $key;//優先度
+		public $name;//名前
+		public $degree;//次数　直接操作のみ　常に、0から次数―1までの次数個の子を持つ
+		public $parent;//親ノード　直接操作のみ
+		public $child;//子ノード配列　直接操作のみ　[0]には0次の、[1]には1次の子ノードが入る
+		//protected $kp;//内容配列における優先度の位置
+		//protected $np;//内容配列における名前の位置
+		protected function setup(){
+			$this->degree=0;
+			$this->child=array();
+		}
+		public function __construct($value,protected $kp,protected $np){
+			$this->setup();
+			$this->setValue($value);
+		}
+		public function getValue(){
+			return $this->value;
+		}
+		public function setValue($value){
+			$this->value=$value;
+			$this->key=$value[$this->kp];
+			$this->name=$value[$this->np];
+		}
+		public function getKey(){
+			return $this->key;
+		}
+		public function setKey($key){
+			$this->value[$this->kp]=$key;
+			$this->key=$key;
+		}
+		public function getName(){
+			return $this->name;
+		}
+		public function setName($name){
+			$this->value[$this->np]=$name;
+			$this->name=$name;
+		}
+
+	}
+	abstract class common implements \Iterator,\countable{//昇順・降順問わない共通部分を実装する抽象クラス
+		protected $cn;//要素数
+		protected $R;//全ての親ノード　例外的に、子に空きができる
+		protected $itr;//Iterator用のスタック
+		protected $itrn;//Iterator用のカウント変数
+		public $shell;//対応するshellオブジェクト
+		protected function setup(){
+			$this->cn=0;
+			$this->R=new namespace\node(array("ROOT",0),1,0);
+			$this->R->parent=$this->R;
+			$this->R->belong=$this;
+		}
+		public function __construct(){
+			$this->setup();
+		}
+		protected function swapToUpper(namespace\node $node):namespace\node{//ノード指定で親と位置を交換して、交換後のノードを返す　すべての親とは交換しない　
+			$parent=$node->parent;
+			if($node->parent==$this->R){return false;}
+			$parent->parent->child[$parent->degree]=$node;//親の親からの参照を修正
+			foreach($node->child as $fenode){//対象の子からの参照を修正
+				$fenode->parent=$parent;
+			}
+			foreach($parent->child as $fenode){//対象を含む、親の子からの参照を修正
+				$fenode->parent=$node;
+			}
+			$parent->child[$node->degree]=$parent;//親から対象への参照を修正
+	
+			//対象と親の構造情報を交換
+			list($node->child,$parent->child)=array($parent->child,$node->child);
+			list($node->parent,$parent->parent)=array($parent->parent,$node->parent);
+			list($node->degree,$parent->degree)=array($parent->degree,$node->degree);
+			return $node;
+		}
+		abstract protected function alignUp(namespace\node $node):namespace\node;//ノード指定で、親より優先度が高いなら親と交換、再帰的に繰り返して交換後のノードを返す
+		abstract protected function alignDown(namespace\node $node):namespace\node;//ノード指定で、より優先度の高い子と比較して優先度が低いなら交換、再帰的に繰り返して交換後のノードを返す
+		protected function extend(namespace\node $child,namespace\node $parent){//親無しのchildをparentの子に加える
+			//childの親からの参照は操作しない
+			$parent->child[$parent->degree]=$child;
+			$parent->degree++;
+			$child->parent=$parent;
+		}
+		public function push(namespace\node $node){//ノードで0次要素をヒープに追加する
+			$this->cn++;
+			$this->add($node);
+		}
+		abstract protected function add(namespace\node $node):int;//親無しのノードをルートに追加する　最終的に追加された次数を返す
+		public function prioritize(namespace\node $node,$new){//対象ノードの優先度を新しい値に変更して、優先度に基づいた位置に移動させる
+			$node->setKey($new);
+			$this->alignDown($this->alignUp($node));
+		}
+		abstract public function top():namespace\node;//最優先ノードを取得する
+		protected function deleteRoot(namespace\node $node){//指定されたルートノードを削除する
+			if($node->parent!=$this->R){return false;}
+	
+			$this->R->child[$node->degree]=null;
+	
+			for($i1=$node->degree-1;$i1>=0;$i1--){
+				$this->add($node->child[$i1]);
+			}
+		}
+		public function pop():namespace\node{//最優先ノードを取り出して削除する
+			$rtobj=$this->top();
+			$this->deleteRoot($rtobj);
+			$rtobj->parent=null;
+			$rtobj->child=array();
+			$rtobj->degree=0;
+			$this->cn--;
+			return $rtobj;
+		}
+		public function delete(namespace\node $node){//ノード指定で削除する
+			while($node->parent!=$this->R){
+				$node=$this->swapToUpper($node);
+			}
+			$this->deleteRoot($node);
+		}
+		public function splice(namespace\node $node):namespace\node{//ノード指定で取り出して削除する
+			$rtobj=$node;
+			$this->delete($node);
+			$rtobj->parent=null;
+			$rtobj->child=array();
+			$rtobj->degree=0;
+			return $rtobj;
+		}
+		public function inThis(namespace\node $node):bool{//このオブジェクトの全ての親に繋がるノードかどうか判定する
+			$obj=$node;
+			while($obj!=$obj->parent){
+				$obj=$obj->parent;
+				if(!is_a($obj,"binomialHeapNode")){return false;}
+			}
+			if($obj==$this->R){return true;}
+			else{return false;}
+		}
+		public function count():int{//要素数を返す
+			return $this->cn;
+		}
+	
+		//Iteratorインターフェイス
+			public function current(): mixed{
+				return $this->itr->top();
+			}
+			public function key(): mixed{
+				return $this->itrn;
+			}
+			public function next(): void{
+				$otobj=$this->itr->pop();
+				for($i2=$otobj->degree-1;$i2>=0;$i2--){
+					$this->itr->push($otobj->child[$i2]);
+				}
+				$this->itrn++;
+			}
+			public function rewind(): void{
+				$this->itr=new \SplStack();
+				$this->itrn=0;
+				if($this->count()==0){return;}
+				$otar=array_reverse(array_keys($this->R->child));
+				foreach($otar as $fen){
+					if($this->R->child[$fen]===null){continue;}
+					$this->itr->push($this->R->child[$fen]);
+				}
+			}
+			public function valid(): bool{
+				return $this->itr->count()>0;
+			}
+		//
+		public function clear(){//ヒープを削除する
+			$this->setup();
+		}
+		public function getRoot():namespace\node{
+			return $this->R;
+		}
+		public function merge(self $heap){//同クラスの対象をこっちにマージする
+			$terget=$heap->getRoot();
+			$otar=array_reverse(array_keys($terget->child));
+			foreach($otar as $fen){
+				if($terget->child[$fen]===null){continue;}
+				$this->add($terget->child[$fen]);
+			}
+			$this->cn+=$heap->count();
+		}
+	}
+	class ascending extends namespace\common{//昇順仕様　優先度の数値が小さい方が優先
+		protected function alignUp(namespace\node $node):namespace\node{//ノード指定で、親より優先度が高いなら親と交換、再帰的に繰り返して交換後のノードを返す
+			if($node->parent==$this->R){return $node;}
+			if($node->getKey() < $node->parent->getKey()){//compare相当処理
+				$node=$this->swapToUpper($node);
+				return $this->alignUp($node);
+			}else{
+				return $node;
+			}
+		}
+		protected function alignDown(namespace\node $node):namespace\node{//ノード指定で、より優先度の高い子と比較して優先度が低いなら交換、再帰的に繰り返して交換後のノードを返す
+			if($node->degree==0){return $node;}
+			$z_max=$node->child[0];
+			for($i1=1;$i1<=$node->degree-1;$i1++){
+				if($node->child[$i1]->getKey() < $z_max->getKey()){//compare相当処理
+					$z_max=$node->child[$i1];
+				}
+			}
+			if($node->getKey() > $z_max->getKey()){//compare相当処理
+				$this->swapToUpper($z_max);
+				return $this->alignDown($z_max);
+			}else{
+				return $node;
+			}
+		}
+		protected function add(namespace\node $node):int{//親無しのノードをルートに追加する　最終的に追加された次数を返す
+			//nodeの親からの参照は操作しない。先に消しておくこと
+			$dn=$node->degree;
+			$node->parent=$this->R;
+			while(true){
+				if(isset($this->R->child[$dn])){
+					$terget=$this->R->child[$dn];
+					$this->R->child[$dn]=null;
+					if($node->getKey()<$terget->getKey()){//compare相当処理
+						$this->extend($terget,$node);
+						$dn++;
+						continue;
+					}else{
+						$this->extend($node,$terget);
+						$dn++;
+						$node=$terget;
+						continue;
+					}
+				}else{
+					$this->R->child[$dn]=$node;
+					return $dn;
+				}
+			}
+		}
+		public function top():namespace\node{//最優先ノードを取得する
+			if($this->cn==0){return false;}
+	
+			$rtobj=null;
+			foreach($this->R->child as $feobj){//全ての親の子の中から、最優先のものを探す
+				if($rtobj===null){
+					$rtobj=$feobj;
+				}elseif($feobj===null){
+				}elseif($feobj->getKey()<$rtobj->getKey()){//compare相当処理
+					$rtobj=$feobj;
+				}
+			}
+			return $rtobj;
+		}
+	}
+	class descending extends namespace\common{//降順仕様　優先度の数値が大きい方が優先
+		protected function alignUp(namespace\node $node):namespace\node{//ノード指定で、親より優先度が高いなら親と交換、再帰的に繰り返して交換後のノードを返す
+			if($node->parent==$this->R){return $node;}
+			if($node->getKey() > $node->parent->getKey()){//compare相当処理
+				$node=$this->swapToUpper($node);
+				return $this->alignUp($node);
+			}else{
+				return $node;
+			}
+		}
+		protected function alignDown(namespace\node $node):namespace\node{//ノード指定で、より優先度の高い子と比較して優先度が低いなら交換、再帰的に繰り返して交換後のノードを返す
+			if($node->degree==0){return $node;}
+			$z_max=$node->child[0];
+			for($i1=1;$i1<=$node->degree-1;$i1++){
+				if($node->child[$i1]->getKey() > $z_max->getKey()){//compare相当処理
+					$z_max=$node->child[$i1];
+				}
+			}
+			if($node->getKey() < $z_max->getKey()){//compare相当処理
+				$this->swapToUpper($z_max);
+				return $this->alignDown($z_max);
+			}else{
+				return $node;
+			}
+		}
+		protected function add(namespace\node $node):int{//親無しのノードをルートに追加する　最終的に追加された次数を返す
+			//nodeの親からの参照は操作しない。先に消しておくこと
+			$dn=$node->degree;
+			$node->parent=$this->R;
+			while(true){
+				if(isset($this->R->child[$dn])){
+					$terget=$this->R->child[$dn];
+					$this->R->child[$dn]=null;
+					if($node->getKey() > $terget->getKey()){//compare相当処理
+						$this->extend($terget,$node);
+						$dn++;
+						continue;
+					}else{
+						$this->extend($node,$terget);
+						$dn++;
+						$node=$terget;
+						continue;
+					}
+				}else{
+					$this->R->child[$dn]=$node;
+					return $dn;
+				}
+			}
+		}
+		public function top():namespace\node{//最優先ノードを取得する
+			if($this->cn==0){return false;}
+	
+			$rtobj=null;
+			foreach($this->R->child as $feobj){//全ての親の子の中から、最優先のものを探す
+				if($rtobj===null){
+					$rtobj=$feobj;
+				}elseif($feobj===null){
+				}elseif($feobj->getKey() > $rtobj->getKey()){//compare相当処理
+					$rtobj=$feobj;
+				}
+			}
+			return $rtobj;
+		}
+	}
+}
+namespace crast\heap\fibonacci{//フィボナッチヒープ本体定義
+	class node{
+		public $value;//内容
+		public $key;//優先度
+		public $name;//名前
+		//protected $kp;//内容配列における優先度の位置
+		//protected $np;//内容配列における名前の位置
+		public $degree;//子リンクの要素数
+		public $damaged=false;//ダメージがあるならtrue
+		public $parent;//親ノード
+		public $child;//最優先子ノード配列
+		public $next;//弟ノード
+		public $prev;//兄ノード
+		protected function setup(){
+			$this->degree=0;
+		}
+		public function __construct($value,protected $kp,protected $np){
+			$this->setup();
+			$this->setValue($value);
+		}
+		public function getValue(){
+			return $this->value;
+		}
+		public function setValue($value){
+			$this->value=$value;
+			$this->key=$value[$this->kp];
+			$this->name=$value[$this->np];
+		}
+		public function getKey(){
+			return $this->key;
+		}
+		public function setKey($key){
+			$this->value[$this->kp]=$key;
+			$this->key=$key;
+		}
+		public function getName(){
+			return $this->name;
+		}
+		public function setName($name){
+			$this->value[$this->np]=$name;
+			$this->name=$name;
+		}
+	}
+	abstract class common implements \Iterator,\countable{
+		protected $cn;//要素数
+		protected $R;//全ての親ノード
+		//protected $rule;//0なら優先度が低いほど優先、1なら優先度が高いほど優先
+		protected $itr;//Iterator用のスタック
+		protected $itrn;//Iterator用のカウント変数
+		public $shell;//対応するfibonacciHeapオブジェクト
+		protected $d1_m;//orgaize時に一旦整列させるための配列
+		protected function setup(){
+			$this->cn=0;
+			$this->R=new namespace\node(array(0,"ROOT"),0,1);//全ての親の名前はshellからは参照されないがデバッグ的に必要
+			$this->R->parent=$this->R;
+			$this->R->belong=$this;
+			$this->d1_m=array();
+		}
+		public function __construct(protected $rule=0){
+			$this->setup();
+		}
+		abstract protected function setMaxChild(namespace\node $parent);//対象の子リンクの最優先ノードを更新する　organizeまではしない
+		protected function cutRoot(namespace\node $node,$flag=true){//対象ノードを、親の子リンクから外し、trueならルートノード末尾に加える　親無しのノードだとエラー
+			if($node===$this->R){return;}
+
+			$parent=$node->parent;
+
+			if($node->next!==$node){//兄弟がいる場合、リンク切断処理が入る
+
+				if($parent->child===$node){//兄弟内での最優先ノードだった場合、最優先ノード更新処理が入る
+					$next=$node->next;//とりあえず子のひとつを抽出しておく
+				}else{
+					$next=false;
+				}
+
+				$node->prev->next=$node->next;
+				$node->next->prev=$node->prev;
+
+				$node->next=null;
+				$node->prev=null;
+
+				if($next){//リンク切断処理の後に、最優先ノード更新処理。
+					$parent->child=$next;//対象が最優先ノードだったときのみ、親の子は変更される
+					$this->setMaxChild($parent);
+				}
+
+			}else{
+				$parent->child=null;//兄弟がいない場合、親の子は無くなる
+			}
+			$parent->degree--;
+			if($flag){$this->putNode($node);}
+			else{$node->parent=null;}
+
+			if($parent->parent===$this->R){return;}//全ての親とルートノードにダメージ判定は無い
+	
+			if($parent->damaged){//親のダメージ次第で連鎖的に切断する
+				$this->cutRoot($parent);//連鎖的に切断する分は自動的にルートノードに追加する
+			}else{
+				$parent->damaged=true;
+			}
+		}
+		abstract protected function putNode(namespace\node $child,namespace\node $parent=null);//単独ノードをparentの子リンク末尾に追加する。childの元の親からの参照には触れない
+		abstract protected function linkRoot(namespace\node $child,namespace\node $parent=null);//childを兄弟リンクごとparentの子リンクに追加する。childの元の親からの参照には触れない
+		abstract protected function organize_rc(namespace\node $node);//d1_mに、繰上り込みで統合する　最終的にd1_mに入ったノードを返す
+		public function organize(){//ルートリンクの、次数が同じ木を統合する
+			$terget=$this->R->child;
+			do{
+				$next=$terget->next;
+				$this->organize_rc($terget);
+				$terget=$next;
+			}while($terget!==$this->R->child);
+
+			$this->d1_m=array();
+		}
+		public function push(namespace\node $node){//ノードで0次要素をヒープに追加する
+			$this->cn++;
+			$this->putNode($node);
+		}
+		abstract public function prioritize(namespace\node $node,$new);//対象ノードの優先度を新しい値に変更して、必要に応じて親子関係を切断する
+		public function top():namespace\node{//最優先ノードを取得する
+			//echo"top\n";
+			if($this->cn==0){return false;}
+			return $this->R->child;
+		}
+		protected function delete(namespace\node $node){//指定されたノードを削除する
+			//echo"delete\n";
+			$this->cn--;//分岐の前に確実に要素数減少処理
+			$this->cutRoot($node,false);
+	
+			if($node->child===null){return;}//対象に子があるとは限らない。
+	
+			$this->linkRoot($node->child);
+			$node->child=null;
+		}
+		public function pop():namespace\node{//最優先ノードを取り出して削除する
+			if($this->cn==0){return false;}
+			$this->organize();
+			$rtobj=$this->top();
+			$this->delete($rtobj);
+			return $rtobj;
+		}
+		public function splice(namespace\node $node):namespace\node{//ノード指定で取り出して削除する
+			$rtobj=$node;
+			$this->delete($node);
+			return $rtobj;
+		}
+		public function inThis(namespace\node $node):bool{//このオブジェクトの全ての親に繋がるノードかどうか判定する
+			$obj=$node;
+			while($obj!=$obj->parent){
+				$obj=$obj->parent;
+				if(!is_a($obj,"namespace\node")){return false;}
+			}
+			if($obj===$this->R){return true;}
+			else{return false;}
+		}
+		public function count():int{//要素数を返す
+			return $this->cn;
+		}
+		//Iteratorインターフェイス
+			public function current(): mixed{
+				return $this->itr->top();
+			}
+			public function key(): mixed{
+				return $this->itrn;
+			}
+			public function next(): void{
+				$first=$this->itr->pop()->child;
+				if($first===null){return;}
+	
+				$terget=$first;
+				do{
+					$terget=$terget->prev;
+					$this->itr->push($terget);
+				}while($terget!==$first);
+				$this->itrn++;
+			}
+			public function rewind(): void{
+				$this->itr=new \SplStack();
+				$this->itrn=0;
+				$this->itr->push($this->R);
+				$this->next();
+			}
+			public function valid(): bool{
+				return $this->itr->count()>0;
+			}
+		//
+		public function clear(){//ヒープを削除する
+			$this->setup();
+		}
+		public function getRoot():namespace\node{
+			return $this->R;
+		}
+		public function merge(self $heap){//同クラスの対象をこっちにマージする
+			$this->linkRoot($heap->getRoot()->child);
+			$this->cn+=$heap->count();
+			$heap->clear();
+		}
+	}
+	class ascending extends namespace\common{//昇順仕様　優先度の数値が小さい方が優先
+		protected function setMaxChild(namespace\node $parent){//対象の子リンクの最優先ノードを更新する　organizeまではしない
+			$first=$parent->child;
+			if($first===null){return;}
+
+			$terget=$first;
+			$z_max=$terget;
+			while($terget->next!==$first){
+				$terget=$terget->next;
+				if($terget->getKey()<$z_max->getkey()){//compare相当処理
+					$z_max=$terget;
+				}
+			}
+			$parent->child=$z_max;
+		}
+		protected function putNode(namespace\node $child,namespace\node $parent=null){//単独ノードをparentの子リンク末尾に追加する。childの元の親からの参照には触れない
+			if($child===$this->R){return;}
+
+			if($parent===null){
+				$parent=$this->R;
+				$flag=true;
+			}else{
+				$flag=false;
+			}
+
+			$child->parent=$parent;
+			if($flag){$child->damaged=false;}
+			$parent->degree++;
+
+			if($parent->child===null){
+				$parent->child=$child;
+				$child->next=$child;//一人で兄弟リンクを形成する
+				$child->prev=$child;
+			}else{
+				$child->prev=$parent->child->prev;
+				$parent->child->prev->next=$child;
+				$child->next=$parent->child;
+				$parent->child->prev=$child;
+				if($child->getKey()<$parent->child->getkey()){//compare相当処理
+					$parent->child=$child;
+				}
+			}
+		}
+		protected function linkRoot(namespace\node $child,namespace\node $parent=null){//childを兄弟リンクごとparentの子リンクに追加する。childの元の親からの参照には触れない
+			if($child===$this->R){return;}
+			if($parent===null){
+				$parent=$this->R;
+				$flag=true;
+			}else{
+				$flag=false;
+			}
+
+			$terget=$child;//兄弟全員分の親を変更する
+			$dn=0;//ついでに、加算される次数を数える
+			do{
+				$dn++;
+				$terget->parent=$parent;
+				$terget=$terget->next;
+				if($flag){$terget->damaged=false;}//ルートノードになる際にダメージは無くなる
+			}while($terget!==$child);
+
+			if($parent->child===null){
+				$parent->child=$child;
+			}else{
+				list($child->prev,$parent->child->prev)=array($parent->child->prev,$child->prev);
+				$child->prev->next=$child;
+				$parent->child->prev->next=$parent->child;
+
+				if($child->getKey()<$parent->child->getkey()){//compare相当処理
+					$parent->child=$child;
+				}
+			}
+
+			$parent->degree+=$dn;//親の次数を修正
+		}
+		protected function organize_rc(namespace\node $node){//d1_mに、繰上り込みで統合する　最終的にd1_mに入ったノードを返す
+			$dn=$node->degree;
+			if(isset($this->d1_m[$dn])){
+				if($node===$this->R->child){//最優先ノードなら、同優先度だろうと何だろうと優先
+					$this->cutRoot($this->d1_m[$dn],false);
+					$this->putNode($this->d1_m[$dn],$node);
+				}elseif($node->getKey()<$this->d1_m[$dn]->getkey()){//compare相当処理
+					$this->cutRoot($this->d1_m[$dn],false);
+					$this->putNode($this->d1_m[$dn],$node);
+				}else{
+					$this->cutRoot($node,false);
+					$this->putNode($node,$this->d1_m[$dn]);
+					$node=$this->d1_m[$dn];
+				}
+				unset($this->d1_m[$dn]);
+				return $this->organize_rc($node);
+			}else{
+				$this->d1_m[$dn]=$node;
+				return $node;
+			}
+		}
+		public function prioritize(namespace\node $node,$new){//対象ノードの優先度を新しい値に変更して、必要に応じて親子関係を切断する
+			if($new==$node->getKey()){
+				return;
+			}elseif($new<$node->getKey()){//compare相当処理
+				$this->priorityUp($node,$new);
+			}else{
+				$this->priorityDown($node,$new);
+			}
+		}
+		public function priorityUp(namespace\node $node,$new){//対象ノードの優先度を上昇させ、親を超えていれば切り離す
+			$node->setKey($new);
+			if($node->parent!==$this->R and $node->getKey()<$node->parent->getKey()){//compare相当処理 ルートノードなら親とは比較しない
+				$this->cutRoot($node);
+			}else{//親と切り離されなかった場合、子リンクの中での最優先ノードの変更の可能性があるので処理
+				if($node->getKey()<$node->parent->child->getKey()){//compare相当処理
+					$node->parent->child=$node;
+				}
+			}
+		}
+		public function priorityDown(namespace\node $node,$new){//対象ノードの優先度を減少させ、子を割っていれば切り離す
+			$node->setKey($new);
+			if($node->parent->child===$node){//最優先ノードだった場合、子リンクの中での最優先ノードの変更の可能性があるので処理
+				$this->setMaxChild($node->parent);
+			}
+			if($node->child!==null and $node->getKey()>$node->child->getKey()){////compare相当処理 子が無いなら子とは比較しない
+				$this->linkRoot($node->child);
+				$node->child=null;
+				$node->degree=0;//linkRootは対象の親を操作しないので、こっちで色々やっておく
+			}
+		}
+	}
+	class descending extends namespace\common{//降順仕様　優先度の数値が大きい方が優先
+		protected function setMaxChild(namespace\node $parent){//対象の子リンクの最優先ノードを更新する　organizeまではしない
+			$first=$parent->child;
+			if($first===null){return;}
+
+			$terget=$first;
+			$z_max=$terget;
+			while($terget->next!==$first){
+				$terget=$terget->next;
+				if($terget->getKey() > $z_max->getkey()){//compare相当処理
+					$z_max=$terget;
+				}
+			}
+			$parent->child=$z_max;
+		}
+		protected function putNode(namespace\node $child,namespace\node $parent=null){//単独ノードをparentの子リンク末尾に追加する。childの元の親からの参照には触れない
+			if($child===$this->R){return;}
+
+			if($parent===null){
+				$parent=$this->R;
+				$flag=true;
+			}else{
+				$flag=false;
+			}
+
+			$child->parent=$parent;
+			if($flag){$child->damaged=false;}
+			$parent->degree++;
+
+			if($parent->child===null){
+				$parent->child=$child;
+				$child->next=$child;//一人で兄弟リンクを形成する
+				$child->prev=$child;
+			}else{
+				$child->prev=$parent->child->prev;
+				$parent->child->prev->next=$child;
+				$child->next=$parent->child;
+				$parent->child->prev=$child;
+				if($child->getKey() > $parent->child->getkey()){//compare相当処理
+					$parent->child=$child;
+				}
+			}
+		}
+		protected function linkRoot(namespace\node $child,namespace\node $parent=null){//childを兄弟リンクごとparentの子リンクに追加する。childの元の親からの参照には触れない
+			if($child===$this->R){return;}
+			if($parent===null){
+				$parent=$this->R;
+				$flag=true;
+			}else{
+				$flag=false;
+			}
+
+			$terget=$child;//兄弟全員分の親を変更する
+			$dn=0;//ついでに、加算される次数を数える
+			do{
+				$dn++;
+				$terget->parent=$parent;
+				$terget=$terget->next;
+				if($flag){$terget->damaged=false;}//ルートノードになる際にダメージは無くなる
+			}while($terget!==$child);
+
+			if($parent->child===null){
+				$parent->child=$child;
+			}else{
+				list($child->prev,$parent->child->prev)=array($parent->child->prev,$child->prev);
+				$child->prev->next=$child;
+				$parent->child->prev->next=$parent->child;
+
+				if($child->getKey() > $parent->child->getkey()){//compare相当処理
+					$parent->child=$child;
+				}
+			}
+
+			$parent->degree+=$dn;//親の次数を修正
+		}
+		protected function organize_rc(namespace\node $node){//d1_mに、繰上り込みで統合する　最終的にd1_mに入ったノードを返す
+			$dn=$node->degree;
+			if(isset($this->d1_m[$dn])){
+				if($node===$this->R->child){//最優先ノードなら、同優先度だろうと何だろうと優先
+					$this->cutRoot($this->d1_m[$dn],false);
+					$this->putNode($this->d1_m[$dn],$node);
+				}elseif($node->getKey() > $this->d1_m[$dn]->getkey()){//compare相当処理
+					$this->cutRoot($this->d1_m[$dn],false);
+					$this->putNode($this->d1_m[$dn],$node);
+				}else{
+					$this->cutRoot($node,false);
+					$this->putNode($node,$this->d1_m[$dn]);
+					$node=$this->d1_m[$dn];
+				}
+				unset($this->d1_m[$dn]);
+				return $this->organize_rc($node);
+			}else{
+				$this->d1_m[$dn]=$node;
+				return $node;
+			}
+		}
+		public function prioritize(namespace\node $node,$new){//対象ノードの優先度を新しい値に変更して、必要に応じて親子関係を切断する
+			if($new==$node->getKey()){
+				return;
+			}elseif($new > $node->getKey()){//compare相当処理
+				$this->priorityUp($node,$new);
+			}else{
+				$this->priorityDown($node,$new);
+			}
+		}
+		public function priorityUp(namespace\node $node,$new){//対象ノードの優先度を上昇させ、親を超えていれば切り離す
+			$node->setKey($new);
+			if($node->parent!==$this->R and $node->getKey() > $node->parent->getKey()){//compare相当処理 ルートノードなら親とは比較しない
+				$this->cutRoot($node);
+			}else{//親と切り離されなかった場合、子リンクの中での最優先ノードの変更の可能性があるので処理
+				if($node->getKey() > $node->parent->child->getKey()){//compare相当処理
+					$node->parent->child=$node;
+				}
+			}
+		}
+		public function priorityDown(namespace\node $node,$new){//対象ノードの優先度を減少させ、子を割っていれば切り離す
+			$node->setKey($new);
+			if($node->parent->child===$node){//最優先ノードだった場合、子リンクの中での最優先ノードの変更の可能性があるので処理
+				$this->setMaxChild($node->parent);
+			}
+			if($node->child!==null and $node->getKey() < $node->child->getKey()){//compare相当処理 子が無いなら子とは比較しない
+				$this->linkRoot($node->child);
+				$node->child=null;
+				$node->degree=0;//linkRootは対象の親を操作しないので、こっちで色々やっておく
+			}
+		}
+	}
+
+}
+
+namespace crast\heap{//shell定義
+	class shell implements \IteratorAggregate,\countable{
+		protected $d1_n;//名前→ノード配列
+		protected $heap;//binaryHeapObjオブジェクト
+		protected const TYPE=array(0=>"binary",1=>"binomial",2=>"fibonacci");
+		protected $heapName;
+		protected const RULE=array(-1=>"test",0=>"ascending",1=>"descending");
+		protected $nodeName;
+		protected $kp;//内容配列における優先度の位置
+		protected $np;//内容配列における名前の位置
+		protected function setup(){
+			$this->d1_n=array();
+		}
+		public function __construct($rule, $key_position, $name_position, $heap_type=0){
+			$this->setup();
+			$this->kp=$key_position;
+			$this->np=$name_position;
+			$this->heapName=__NAMESPACE__."\\".self::TYPE[$heap_type]."\\".self::RULE[$rule];
+			$this->nodeName=__NAMESPACE__."\\".self::TYPE[$heap_type]."\\node";
+			$this->heap=new ($this->heapName)();//使用するヒープの名前を動的に生成
+			$this->heap->shell=$this;//ヒープオブジェクトからこちらを認識できるようにしておく
+		}
+		public function swapNode($name1,$name2){
+			if(array_key_exists($name1,$this->d1_n) and array_key_exists($name2,$this->d1_n)){
+				list($this->d1_n[$name1],$this->d1_n[$name2])=array($this->d1_n[$name2],$this->d1_n[$name1]);
+			}
+		}
+		public function push(array $d1_v):bool{//内容配列からノードを生成、名前→ノード配列とヒープ本体に追加する
+			if(isset($this->d1_n[$d1_v[$this->np]])){return false;}
+			$node=new ($this->nodeName)($d1_v,$this->kp,$this->np);
+			$this->d1_n[$node->getName()]=$node;
+			$this->heap->push($node);
+			return true;
+		}
+		public function change($d1_v):bool{//内容配列で同名ノードの内容を上書き
+			$name=$d1_v[$this->np];
+			if(!isset($this->d1_n[$name])){return false;}
+			$this->d1_n[$name]->setValue($d1_v);
+			$this->heap->prioritize($this->d1_n[$name],$d1_v[$this->kp]);
+			return true;
+		}
+		public function write($d1_v){//内容配列で追加、できなければ上書き
+			if($this->push($d1_v)===false){$this->change($d1_v);}
+		}
+		public function rename($old,$new):bool{//名前で指定したノードの名前だけを変更
+			if(!isset($this->d1_n[$old])){return false;}
+			if(isset($this->d1_n[$new])){return false;}
+			$this->d1_n[$new]=$this->d1_n[$old];
+			unset($this->d1_n[$old]);
+			$this->d1_n[$new]->setName($new);
+			return true;
+		}
+		public function top():array{//最優先ノードの内容を出力
+			return $this->heap->top()->getValue();
+		}
+		public function pop():array{//最優先ノードの内容を出力して削除
+			$node=$this->heap->pop();
+			unset($this->d1_n[$node->getName()]);
+			return $node->getValue();
+		}
+		public function delete($name){//名前で指定したノードを削除
+			if(!isset($this->d1_n[$name])){return false;}
+			$this->heap->delete($this->d1_n[$name]);
+			unset($this->d1_n[$name]);
+		}
+		public function splice($name):array{//名前で指定したノードの内容を出力して削除
+			if(!isset($this->d1_n[$name])){return false;}
+			$node=$this->d1_n[$name];//出力内容の退避
+			$this->delete($name);
+			return $node->getValue;
+		}
+		public function prioritize($name,$new):bool{//名前指定で優先度変更
+			if(!isset($this->d1_n[$name])){return false;}
+			$this->heap->prioritize($this->d1_n[$name],$new);
+			return true;
+		}
+		public function count():int{
+			return $this->heap->count();
+		}
+		public function getIterator():\Traversable {
+			return new \ArrayIterator($this->d1_n);
+		}
+		public function getHeap(){
+			return $this->heap;
+		}
+		public function merge(self $obj){//名前被りは一切考慮していない
+			if($this->np!==null){
+				foreach($obj as $name=>$node){
+					$this->d1_n[$name]=$node;
+				}
+			}
+			$this->heap->merge($obj->getHeap());
+		}
+		public function getList(){//名前→内容配列を出力する
+			$d2_rt=array();
+			foreach($this->d1_n as $key=>$node){
+				$d2_rt[$key]=$node->getValue();
+			}
+			return $d2_rt;
+		}
+	}
+}
