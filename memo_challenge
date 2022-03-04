@@ -1,0 +1,195 @@
+<?PHP
+//新しいコードを試してみる場所。
+set_time_limit(0);
+function timeCheck(){
+	static $beforeCheckTime;
+	$newCheckTime=substr(str_pad(hrtime()[0],9,"0",STR_PAD_LEFT).".".str_pad(hrtime()[1],9,"0",STR_PAD_LEFT),4,9);
+	if(isset($beforeCheckTime)){$echo=round($newCheckTime-$beforeCheckTime,3);echo "time_$echo<br>\n";}
+	$beforeCheckTime=$newCheckTime;
+}
+//動的計画法とかで使う、メモを作るのに使ってる関数を、クラスに再構築する。
+
+//メモに存在すれば内容を、無ければfalseを返す
+//対象のメモ、検索対象の位置を指す配列
+function memo_read_lib_a_1($dn_memo,$d1_t){
+    $cn=count($d1_t);
+    $otar=&$dn_memo;
+    for($i1=0;$i1<$cn;$i1++){
+        if(!array_key_exists($d1_t[$i1],$otar)){return false;}
+        $otar=&$otar[$d1_t[$i1]];
+    }
+    $an=$otar;
+    unset($otar);
+    return $an;
+}
+
+//メモに書き込む。条件0で新規なら、-1でより小さければ、1でより大きければ　
+//変更有りならtrue、変更無しならfalseを返す
+//メモの名前、位置を示す配列、入れたい内容、条件
+function memo_write_lib_b_1($memoname,$d1_t,$tn,$in=0){
+    global $$memoname;
+
+    $cn=count($d1_t);
+    $otar=&$$memoname;
+    $otcn=0;
+    for($i1=0;$i1<$cn;$i1++){
+        if(!array_key_exists($d1_t[$i1],$otar)){$otar[$d1_t[$i1]]=array();$otcn=1;}
+        $otar=&$otar[$d1_t[$i1]];
+    }
+    if($otcn>0){$otar=$tn;}
+    elseif($in==0 and $otcn==0){return false;}
+    elseif($in==1){
+        if(is_array($tn)){
+            if(count($otar)<count($tn)){$otar=$tn;}
+            else{return false;}
+        }
+        else{
+            if($otar<$tn){$otar=$tn;}
+            else{return false;}
+        }
+    }
+    elseif($in==-1){
+        if(is_array($tn)){
+            if(count($otar)>count($tn)){$otar=$tn;}
+            else{return false;}
+        }
+        else{
+            if($otar>$tn){$otar=$tn;}
+            else{return false;}
+        }
+    }
+    unset($otar);
+    
+    return true;
+}
+
+
+class memo{
+    protected $dn_t;
+    //protected $name;//次数不定メモの場合、捜査対象は専用の名前のキーに入れる
+    public function __construct(protected $name=null){}
+    protected function compare($tn1,$tn2):int{//rule=2で使用する比較メソッド
+        if(is_array($tn1)){
+            $tn1=count($tn1);
+            $tn2=count($tn2);
+        }
+        if($tn1==$tn2){return 0;}
+        elseif($tn1<$tn2){return -1;}
+        else{return 1;}
+    }
+    public function getValue(array $d1_t):mixed{//メモに存在すれば内容を、無ければfalseを返す
+        $cn=count($d1_t);
+        $otar=$this->dn_t;
+        foreach($d1_t as $key=>$fen){
+            if(!isset($otar[$fen])){return false;}
+            $otar=$otar[$fen];
+        }
+        if($this->name===null){
+            return $otar; 
+        }else{
+            return $otar[$this->name];
+        }
+    }
+    //メモに書き込む。条件0で新規なら、-1でより小さければ、1でより大きければ
+    //-2でcompareで-1なら、2でcompareで1なら
+    //変更有りならtrue、変更無しならfalseを返す
+    public function setValue(array $d1_t,$value,int $rule=0):bool{
+        $otar=&$this->dn_t;
+        $otck=false;//新規の値か否か
+        foreach($d1_t as $key=>$fen){
+            if(!isset($otar[$fen])){
+                $otar[$fen]=array();
+                $otck=true;
+            }
+            $otar=&$otar[$fen];
+        }
+
+        if($this->name!==null){
+            $otar=&$otar[$this->name];
+        }
+
+        //ruleに基づいて、書き込むかfalseを返す
+        if($otck){//完全新規なら無条件で書き込み
+            $otar=$value;
+        }elseif($rule==0){//rule=0なら、完全新規でない時点でfalse
+            return false;
+        }elseif($rule==1){
+            if(is_array($value)){
+                if(count($otar)<count($value)){
+                    $otar=$value;
+                }else{
+                    return false;
+                }
+            }else{
+                if($otar<$value){
+                    $otar=$value;
+                }else{
+                    return false;
+                }
+            }
+        }
+        elseif($rule==-1){
+            if(is_array($value)){
+                if(count($otar)>count($value)){
+                    $otar=$value;
+                }else{
+                    return false;
+                }
+            }
+            else{
+                if($otar>$value){
+                    $otar=$value;
+                }else{
+                    return false;
+                }
+            }
+        }elseif($rule==2){
+            if($this->compare($otar,$value)<0){
+                $otar=$value;
+                }else{
+                return false;
+            }
+        }elseif($rule==-2){
+            if($this->compare($otar,$value)>0){
+                $otar=$value;
+                }else{
+                return false;
+            }
+        }
+        unset($otar);//リファレンスは使い終わった時点でunsetしておかないと不安。
+        
+        return true;      
+    }
+}
+
+//テストしてみる。
+$ln_l=10000;
+$ln_k=100;
+$ln_t=1000;
+$rule=1;
+$dn_memo=array();
+$test1=new memo();
+$test2=new memo("__MEMO");
+for($i1=0;$i1<$ln_l;$i1++){
+    $otar=array(rand(1,$ln_k),rand(1,$ln_k),rand(1,$ln_k));
+    $otn=rand(1,$ln_t);
+    memo_write_lib_b_1("dn_memo",$otar,$otn,$rule);
+    $test1->setValue($otar,$otn,$rule);
+    $test2->setValue($otar,$otn,$rule);
+    $otan0=memo_read_lib_a_1($dn_memo,$otar);
+    $otan1=$test1->getValue($otar);
+    $otan2=$test2->getValue($otar);
+    if($otan0===$otan1 and $otan1===$otan2){}
+    else{echo "$otan0,$otan1,$otan2<br>\n";}
+
+    $otar=array(rand(1,$ln_k),rand(1,$ln_k),rand(1,$ln_k));
+    $otan0=memo_read_lib_a_1($dn_memo,$otar);
+    $otan1=$test1->getValue($otar);
+    $otan2=$test2->getValue($otar);
+    if($otan0===$otan1 and $otan1===$otan2){}
+    else{echo "$otan0,$otan1,$otan2<br>\n";}
+}
+
+//よし、問題なし。
+//名前関係でちょっとドジってたとこを修正したりはしたけども。
+?>
