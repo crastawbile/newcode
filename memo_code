@@ -1,0 +1,101 @@
+<?php
+namespace crast;
+
+class memo{
+    protected $dn_t;
+    //protected $name;//次数不定メモの場合、捜査対象は専用の名前のキーに入れる
+    //位置配列引数の末尾を固定するのと同じなので、不要と言えば不要
+    public function __construct(protected $name=null){}
+    protected function compare($tn1,$tn2):int{//rule=2で使用する比較メソッド
+        if(is_array($tn1)){
+            $tn1=count($tn1);
+            $tn2=count($tn2);
+        }
+        if($tn1==$tn2){return 0;}
+        elseif($tn1<$tn2){return -1;}
+        else{return 1;}
+    }
+    public function getValue(array $d1_t):mixed{//メモに存在すれば内容を、無ければfalseを返す
+        $cn=count($d1_t);
+        $otar=$this->dn_t;
+        foreach($d1_t as $key=>$fen){
+            if(!isset($otar[$fen])){return false;}
+            $otar=$otar[$fen];
+        }
+        if($this->name===null){
+            return $otar; 
+        }else{
+            return $otar[$this->name];
+        }
+    }
+    //メモに書き込む。条件0で新規なら、-1でより小さければ、1でより大きければ
+    //-2でcompareで-1なら、2でcompareで1なら
+    //変更有りならtrue、変更無しならfalseを返す
+    public function setValue(array $d1_t,$value,int $rule=0):bool{
+        $otar=&$this->dn_t;
+        $otck=false;//新規の値か否か
+        foreach($d1_t as $key=>$fen){
+            if(!isset($otar[$fen])){
+                $otar[$fen]=array();
+                $otck=true;
+            }
+            $otar=&$otar[$fen];
+        }
+
+        if($this->name!==null){
+            $otar=&$otar[$this->name];
+        }
+
+        //ruleに基づいて、書き込むかfalseを返す
+        if($otck){//完全新規なら無条件で書き込み
+            $otar=$value;
+        }elseif($rule==0){//rule=0なら、完全新規でない時点でfalse
+            return false;
+        }elseif($rule==1){
+            if(is_array($value)){
+                if(count($otar)<count($value)){
+                    $otar=$value;
+                }else{
+                    return false;
+                }
+            }else{
+                if($otar<$value){
+                    $otar=$value;
+                }else{
+                    return false;
+                }
+            }
+        }
+        elseif($rule==-1){
+            if(is_array($value)){
+                if(count($otar)>count($value)){
+                    $otar=$value;
+                }else{
+                    return false;
+                }
+            }
+            else{
+                if($otar>$value){
+                    $otar=$value;
+                }else{
+                    return false;
+                }
+            }
+        }elseif($rule==2){
+            if($this->compare($otar,$value)<0){
+                $otar=$value;
+                }else{
+                return false;
+            }
+        }elseif($rule==-2){
+            if($this->compare($otar,$value)>0){
+                $otar=$value;
+                }else{
+                return false;
+            }
+        }
+        unset($otar);//リファレンスは使い終わった時点でunsetしておかないと不安。
+        
+        return true;      
+    }
+}
