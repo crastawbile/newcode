@@ -49,7 +49,7 @@ class c_sort {
 			if($node1[$this->kp]==$node2[$this->kp]){
 				return (-1)**$this->rule2;
 			}
-			return $node1[$this->kp]>$node2[$this->kp]? -1:1;
+			return $node1[$this->kp]>$node2[$this->kp]? 1:-1;//条件と返り値を両方逆にする馬鹿がここにいました
 		}
 	}
 	public function i_sort($d2_t){//挿入ソート
