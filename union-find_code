@@ -1,0 +1,48 @@
+class ufTree{
+	private $d1_p;//接続先一覧
+	private $d1_r;//ランク一覧
+
+	function __construct($something){
+		if(is_int($something)){
+			$this->d1_p=range(0,$something);
+			$this->d1_r=array_fill(0,$something+1,0);
+		}
+		elseif(is_array($something)){
+			foreach($something as $fen){
+				$this->d1_p[$fen]=$fen;
+				$this->d1_r[$fen]=0;
+			}
+		}
+	}
+
+	public function findRoot($tn){
+		if($this->d1_p[$tn]==$tn){
+			return $tn;
+		}
+		else{
+			$this->d1_p[$tn]=$this->findRoot($this->d1_p[$tn]);
+			return $this->d1_p[$tn];
+		}
+	}
+	public function isSame($ar){
+		if($this->d1_p[$ar[0]]==$this->d1_p[$ar[1]]){return true;}
+		return $this->findRoot($ar[0])==$this->findRoot($ar[1]);
+	}
+
+	function unite($ar){
+		$rn1=$this->findRoot($ar[0]);
+		$rn2=$this->findRoot($ar[1]);
+		if($rn1==$rn2){return;}
+
+		if($this->d1_r[$rn1]<$this->d1_r[$rn2]){
+			$this->d1_p[$rn1]=$rn2;
+		}
+		else{
+			$this->d1_p[$rn2]=$rn1;
+			if($this->d1_r[$rn1]==$this->d1_r[$rn2]){
+				$this->d1_r[$rn1]++;
+			}
+		}
+
+	}
+}
