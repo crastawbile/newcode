@@ -1,0 +1,335 @@
+namespace crast\memo{//メモをライブラリ化するなら、もうちょっと一般化してみようと思い立つなど。
+    //単純型と範囲型だけ追加。そのうち必要になったら追加する感じで。
+    class a{//単純型、1次配列に入れるだけ
+        protected $memo;//メモ本体
+        //protected $rule;//基本ルール
+        public function __construct(protected $rule=0){
+            $this->memo=array();
+        }
+        protected final function compare1($tn1,$tn2):int{//rule=1で使用する内容比較メソッド　tn1>tn2で1を返す
+            if(is_array($tn1)){
+                $tn1=count($tn1);
+                $tn2=count($tn2);
+            }
+            if($tn1>$tn2){return 1;}
+            elseif($tn1<$tn2){return -1;}
+            else{return 0;}
+        }
+        protected function compare($tn1,$tn2):int{//rule=2で使用する内容比較メソッド、オーバーライド用
+            if(is_array($tn1)){
+                $tn1=count($tn1);
+                $tn2=count($tn2);
+            }
+            if($tn1>$tn2){return 1;}
+            elseif($tn1<$tn2){return -1;}
+            else{return 0;}
+        }
+        //$oldがfalseでない前提で、ruleごとに更新の必要があるかどうかを判定する
+        //compareはこの形でのみ使用する。
+        protected final function isNeed($new,$old,?int $rule=null):bool{
+            if($rule===null){$rule=$this->rule;}
+            if($rule===0){
+                return false;
+            }elseif($rule===1 and $this->compare1($new,$old)>0){
+                return true;
+            }elseif($rule===-1 and $this->compare1($new,$old)<0){
+                return true;
+            }elseif($rule===2 and $this->compare($new,$old)>0){
+                return true;
+            }elseif($rule===-2 and $this->compare($new,$old)<0){
+                return true;
+            }
+            return false;
+        }
+        public function getValue(int|string $tn):mixed{//メモに存在すれば内容を、無ければfalseを返す
+            if(isset($this->memo[$tn])){
+                return $this->memo[$tn];
+            }else{
+                return false;
+            }
+        }
+        //メモに書き込む。条件0で新規なら、-1でより小さければ、1でより大きければ
+        //-2でcompareで-1なら、2でcompareで1なら
+        //変更有りならtrue、変更無しならfalseを返す
+        public function setValue(int|string $tn,mixed $value,?int $rule=null):bool{
+            if($rule===null){$rule=$this->rule;}
+            if(!isset($this->memo[$tn])){
+                $this->memo[$tn]=$value;
+                return true;
+            }else{
+                if($this->isNeed($value,$this->memo[$tn],$rule)){
+                    $this->memo[$tn]=$value;
+                    return true;
+                }else{
+                    return false;
+                }
+            }
+        }
+    }
+    class node_b {
+        //public $value;//範囲の値
+        //public $lower;//範囲の下限
+        //public $upper;//範囲の上限
+        public $prev;//一つ下の範囲オブジェクト
+        public $next;//一つ上の範囲オブジェクト
+        //public $prev_upper;//prevの上限　これある方が速いんだろうか。そんなに参照回数ないかな……?
+        //public $next_lower;//nextの下限
+        public function __construct(public $value,public $lower=null,public $upper=null){}
+    }
+    class b extends a{//整数範囲型　lowerからupperまではvalueの値、というタイプのメモ
+        protected $R;//Rは一番下の範囲オブジェクトとする
+        protected $cn;//無限ループ防止用に、範囲オブジェクト数をカウントしておく
+        public function __construct(protected $rule=0,protected $fill=false){
+            $this->cn=0;
+        }
+        protected final function isEquiv($new,$old,int $rule=null):bool{//接続時に同値確認が必要なので、更新の必要確認とは別に作っておく。
+            if($rule===null){$rule=$this->rule;}
+            if($rule===0){
+                return $new===$old;
+            }elseif($rule===1 and $this->compare1($new,$old)===0){
+                return true;
+            }elseif($rule===-1 and $this->compare1($new,$old)===0){
+                return true;
+            }elseif($rule===2 and $this->compare($new,$old)===0){
+                return true;
+            }elseif($rule===-2 and $this->compare($new,$old)===0){
+                return true;
+            }
+            return false;
+        }
+        protected function extend(node_b $node, ?int $rule=null, ?bool $fill=null){//fill=true前提で、nodeとnextの間をどちらかに埋める。
+            if($rule===null){$rule=$this->rule;}
+            if($fill===null){$fill=$this->fill;}
+            if($this->isNeed($node->value,$node->next->value)){
+                $node->upper=$node->next->lower-1;
+            }else{
+                $node->next->lower=$node->upper+1;
+            }
+        } 
+        protected function join(node_b $node, ?int $rule=null, ?bool $fill=null){//nodeをnextと接続する必要があるなら接続、先にextend前提
+            if($node===null or $node->next===null){return;}
+            if($rule===null){$rule=$this->rule;}
+            if($fill===null){$fill=$this->fill;}
+            if($fill===false and $node->upper+1!=$node->next->lower){return;}//fill=falseで隣接してないなら接続しない
+            if(!$this->isEquiv($node->value,$node->next->value,$rule)){return;}//両方存在して隣接しているので、後は同値なら接続
+            $node->upper=$node->next->upper;
+            $node->next=$node->next->next;
+            if($node->next!==null){
+                $node->next->prev=$node;
+            }
+            $this->cn--;
+        }
+        protected function devide(node_b $node, int $tn, ?int $rule=null, ?bool $fill=null){//$nodeをtnだけ別オブジェクトに分離する
+            if($rule===null){$rule=$this->rule;}
+            if($fill===null){$fill=$this->fill;}
+            if($node->lower!==$tn){
+                $otnode=new node_b($node->value,$node->lower,$tn-1);
+                $node->lower=$tn;
+                if($node->prev!==null){
+                    $otnode->prev=$node->prev;
+                    $node->prev->next=$otnode;
+                }
+                $otnode->next=$node;
+                $node->prev=$otnode;
+                $this->cn++;
+            }
+            if($node->upper!==$tn){
+                $otnode=new node_b($node->value,$tn+1,$node->upper);
+                $node->upper=$tn;
+                if($node->next!==null){
+                    $otnode->next=$node->next;
+                    $node->next->prev=$otnode;
+                }
+                $otnode->prev=$node;
+                $node->next=$otnode;
+                $this->cn++;
+            }
+
+        }
+        
+        protected function possess(int $tn):array|node_b {//メモに存在すればその範囲オブジェクトを、無ければ両脇の範囲オブジェクトを返す
+            $node=$this->R;
+            for($i1=0;$i1<$this->cn;$i1++){
+                if($tn<$node->lower){
+                    return array($node->prev,$node);
+                }elseif($tn<=$node->upper){
+                    return $node;
+                }else{
+                    if($node->next===null){
+                        return array($node,null);
+                    }else{
+                        $node=$node->next;
+                    }
+                }
+            }
+        }
+        public function getValue(int|string $tn):mixed{//メモに存在すれば内容を、無ければfalseを返す
+            $rt=$this->possess($tn);
+            if(is_array($rt)){
+                return false;
+            }else{
+                return $rt->value;
+            }
+        }
+
+        //メモに書き込む。条件0で新規なら、-1でより小さければ、1でより大きければ
+        //-2でcompareで-1なら、2でcompareで1なら
+        //変更有りならtrue、変更無しならfalseを返す
+        //$fill=falseで隣接同値のみ結合、trueでメモ間は全て優先度低い方に結合
+        //単純配列で結合すると、数が増えた時に重くなる、双方向リンクの方がまだ軽いか……?
+        //SplDoublyLinledListではだめか、リンク持ちオブジェクトが必要だ。
+        public function setValue(int|string $tn, $value, ?int $rule=null, ?bool $fill=null):bool{
+            if($rule===null){$rule=$this->rule;}
+            if($fill===null){$fill=$this->fill;}
+            if($this->R===null){//最初の一回は特例処理
+                $this->R=new node_b($value,$tn,$tn);
+                $this->cn++;
+                return true;
+            }
+
+            $rt=$this->possess($tn);
+            if(is_array($rt)){//空きスペースに追加の場合
+                $otnode=new node_b($value,$tn,$tn);
+                $this->cn++;
+                if($rt[0]!==null){
+                    $rt[0]->next=$otnode;
+                    $otnode->prev=$rt[0];
+                    $this->extend($rt[0]);
+                    $this->join($rt[0]);
+                }
+                if($rt[1]!==null){
+                    $rt[1]->prev=$otnode;
+                    $otnode->next=$rt[1];
+                    $this->extend($otnode);
+                    $this->join($otnode);
+                }
+            }else{//既存範囲に追加の場合
+                if($this->isNeed($rt->value,$value)){return false;}//既存の値の方が優先度高いなら何もせず終了
+                $this->devide($rt,$tn);
+                $rt->value=$value;//条件上、extendもjoinも不要確定
+            }
+            return true;
+        }
+        public function getList(){
+            $d2_rt=array();
+            $node=$this->R;
+            for($i1=0;$i1<$this->cn;$i1++){
+                $d2_rt[]=array($node->lower,$node->upper,$node->value);
+                $node=$node->next;
+            }
+            return $d2_rt;
+        }
+        public function printList(){
+            $node=$this->R;
+            for($i1=0;$i1<$this->cn;$i1++){
+                echo $node->lower." ".$node->upper." ".$node->value."\n";
+                $node=$node->next;
+            }
+            echo "\n";
+        }
+
+    }
+    class c{//複数の組み合わせごとにメモする場合。次数不定のツリー型メモ
+        protected $dn_tree;
+        //protected $name;//次数不定メモの場合、捜査対象は専用の名前のキーに入れる
+        //位置配列引数の末尾を固定するのと同じなので、不要と言えば不要
+        public function __construct(protected $rule=0,protected $name=null){
+            $this->dn_tree=array();
+        }
+        protected function compare($tn1,$tn2):int{//rule=2で使用する内容比較メソッド、オーバーライド用
+            if(is_array($tn1)){
+                $tn1=count($tn1);
+                $tn2=count($tn2);
+            }
+            if($tn1>$tn2){return 1;}
+            elseif($tn1<$tn2){return -1;}
+            else{return 0;}
+        }
+
+        public function getValue(array $d1_t):mixed{//メモに存在すれば内容を、無ければfalseを返す
+            $otar=$this->dn_tree;
+            $cn=count($d1_t);
+            for($i1=0;$i1<$cn;$i1++){
+                if(!array_key_exists($d1_t[$i1],$otar)){return false;}
+                $otar=$otar[$d1_t[$i1]];
+            }
+
+            if($this->name===null){
+                return $otar; 
+            }else{
+                return $otar[$this->name];
+            }
+        }
+        //メモに書き込む。条件0で新規なら、-1でより小さければ、1でより大きければ
+        //-2でcompareで-1なら、2でcompareで1なら
+        //変更有りならtrue、変更無しならfalseを返す
+        public function setValue(array $d1_t,$value,?int $rule=null):bool{
+            if($rule===null){$rule=$this->rule;}
+            $otar=&$this->dn_tree;
+            $otck=false;//新規の値か否か
+            $cn=count($d1_t);
+            for($i1=0;$i1<$cn;$i1++){
+                if(!array_key_exists($d1_t[$i1],$otar)){
+                    $otar[$d1_t[$i1]]=array();
+                    $otck=true;
+                }
+                $otar=&$otar[$d1_t[$i1]];
+            }
+            if($this->name!==null){
+                $otar=&$otar[$this->name];
+            }
+
+            //ruleに基づいて、書き込むかfalseを返す
+            if($otck){//完全新規なら無条件で書き込み
+                $otar=$value;
+            }elseif($rule==0){//rule=0なら、完全新規でない時点でfalse
+                return false;
+            }elseif($rule==1){
+                if(is_array($value)){
+                    if(count($otar)<count($value)){
+                        $otar=$value;
+                    }else{
+                        return false;
+                    }
+                }else{
+                    if($otar<$value){
+                        $otar=$value;
+                    }else{
+                        return false;
+                    }
+                }
+            }
+            elseif($rule==-1){
+                if(is_array($value)){
+                    if(count($otar)>count($value)){
+                        $otar=$value;
+                    }else{
+                        return false;
+                    }
+                }
+                else{
+                    if($otar>$value){
+                        $otar=$value;
+                    }else{
+                        return false;
+                    }
+                }
+            }elseif($rule==2){
+                if($this->compare($otar,$value)<0){
+                    $otar=$value;
+                    }else{
+                    return false;
+                }
+            }elseif($rule==-2){
+                if($this->compare($otar,$value)>0){
+                    $otar=$value;
+                    }else{
+                    return false;
+                }
+            }
+            unset($otar);//リファレンスは使い終わった時点でunsetしておかないと不安。
+            
+            return true;
+        }
+    }
+}
