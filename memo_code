@@ -8,6 +8,8 @@ class memo{//複数の組み合わせごとにメモする場合。次数不定�
         $this->dn_tree=array();
     }
     protected function compare($tn1,$tn2):int{//rule=2で使用する内容比較メソッド、オーバーライド用
+        if($tn2===null){return 1;}
+        if($tn1===null){return -1;}
         if(is_array($tn1)){
             $tn1=count($tn1);
             $tn2=count($tn2);
@@ -57,34 +59,24 @@ class memo{//複数の組み合わせごとにメモする場合。次数不定�
         }elseif($rule==0){//rule=0なら、完全新規でない時点でfalse
             return false;
         }elseif($rule==1){
-            if(is_array($value)){
-                if(count($otar)<count($value)){
-                    $otar=$value;
-                }else{
-                    return false;
-                }
+            if($value===null){
+                return false;
+            }elseif($otar===null){
+                $otar=$value;
+            }elseif($otar<$value){
+                $otar=$value;
             }else{
-                if($otar<$value){
-                    $otar=$value;
-                }else{
-                    return false;
-                }
+                return false;
             }
-        }
-        elseif($rule==-1){
-            if(is_array($value)){
-                if(count($otar)>count($value)){
-                    $otar=$value;
-                }else{
-                    return false;
-                }
-            }
-            else{
-                if($otar>$value){
-                    $otar=$value;
-                }else{
-                    return false;
-                }
+        }elseif($rule==-1){
+            if($value===null){
+                return false;
+            }elseif($otar===null){
+                $otar=$value;
+            }elseif($otar>$value){
+                $otar=$value;
+            }else{
+                return false;
             }
         }elseif($rule==2){
             if($this->compare($otar,$value)<0){
