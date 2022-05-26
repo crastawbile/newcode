@@ -1,0 +1,1583 @@
+<?PHP
+namespace{
+    //新しいコードを試してみる場所。
+    set_time_limit(0);
+    function timeCheck(){
+        static $beforeCheckTime;
+        $newCheckTime=substr(str_pad(hrtime()[0],9,"0",STR_PAD_LEFT).".".str_pad(hrtime()[1],9,"0",STR_PAD_LEFT),4,9);
+        if(isset($beforeCheckTime)){$echo=round($newCheckTime-$beforeCheckTime,3);echo "_time__$echo<br>\n";}
+        $beforeCheckTime=$newCheckTime;
+    }
+    function memoryCheck($now=false){
+        if($now){
+            $ot=strval(memory_get_usage());
+        }else{
+            $ot=strval(memory_get_peak_usage());
+        }
+        $echo=round($ot/(1024*1024),3);
+        echo "memory_$echo<br>\n";
+    }
+    //メモをライブラリ化するなら、もうちょっと一般化してみようと思い立つなど。
+}
+namespace crast\memo{
+    class a{//単純型、1次配列に入れるだけ
+        protected $memo;//メモ本体
+        public const TYPE="a";
+        //protected $rule;//基本ルール
+        public function __construct(protected $rule=0){
+            $this->memo=array();
+        }
+        protected final function compare1($tn1,$tn2):int{//rule=1で使用する内容比較メソッド　tn1>tn2で1を返す
+            if($tn2===false or $tn2===null){return 1;}//割と、falseとかnullとか出力するからなあ、実際。
+            if($tn1===false or $tn1===null){return -1;}
+            if($tn1>$tn2){return 1;}
+            elseif($tn1<$tn2){return -1;}
+            else{return 0;}
+        }
+        protected function compare($tn1,$tn2):int{//rule=2で使用する内容比較メソッド、オーバーライド用
+            if($tn2===false or $tn2===null){return 1;}
+            if($tn1===false or $tn1===null){return -1;}
+            if(is_array($tn1)){
+                $tn1=count($tn1);
+                $tn2=count($tn2);
+            }
+            if($tn1>$tn2){return 1;}
+            elseif($tn1<$tn2){return -1;}
+            else{return 0;}
+        }
+        //$oldがfalseでない前提で、ruleごとに更新の必要があるかどうかを判定する
+        //compareはこの形でのみ使用する。
+        protected final function isNeed($new,$old,?int $rule=null):bool{
+            if($rule===null){$rule=$this->rule;}
+            if($rule===0){
+                return false;
+            }elseif($rule===1 and $this->compare1($new,$old)>0){
+                return true;
+            }elseif($rule===-1 and $this->compare1($new,$old)<0){
+                return true;
+            }elseif($rule===2 and $this->compare($new,$old)>0){
+                return true;
+            }elseif($rule===-2 and $this->compare($new,$old)<0){
+                return true;
+            }
+            return false;
+        }
+        public function read(int|string $tn):mixed{//メモに存在すれば内容を、無ければfalseを返す
+            if(array_key_exists($tn,$this->memo)){
+                return $this->memo[$tn];
+            }else{
+                return false;
+            }
+        }
+        //メモに書き込む。条件0で新規なら、-1でより小さければ、1でより大きければ
+        //-2でcompareで-1なら、2でcompareで1なら
+        //変更有りならtrue、変更無しならfalseを返す
+        public function write(int|string $tn,mixed $value,?int $rule=null):bool{
+            if($rule===null){$rule=$this->rule;}
+
+            if(!array_key_exists($tn,$this->memo)){
+                $this->memo[$tn]=$value;
+                return true;
+            }else{<?PHP
+namespace{
+    //新しいコードを試してみる場所。
+    set_time_limit(0);
+    function timeCheck(){
+        static $beforeCheckTime;
+        $newCheckTime=substr(str_pad(hrtime()[0],9,"0",STR_PAD_LEFT).".".str_pad(hrtime()[1],9,"0",STR_PAD_LEFT),4,9);
+        if(isset($beforeCheckTime)){$echo=round($newCheckTime-$beforeCheckTime,3);echo "_time__$echo<br>\n";}
+        $beforeCheckTime=$newCheckTime;
+    }
+    function memoryCheck($now=false){
+        if($now){
+            $ot=strval(memory_get_usage());
+        }else{
+            $ot=strval(memory_get_peak_usage());
+        }
+        $echo=round($ot/(1024*1024),3);
+        echo "memory_$echo<br>\n";
+    }
+    //メモをライブラリ化するなら、もうちょっと一般化してみようと思い立つなど。
+}
+namespace crast\memo{
+    class a{//単純型、1次配列に入れるだけ
+        protected $memo;//メモ本体
+        public const TYPE="a";
+        //protected $rule;//基本ルール
+        public function __construct(protected $rule=0){
+            $this->memo=array();
+        }
+        protected final function compare1($tn1,$tn2):int{//rule=1で使用する内容比較メソッド　tn1>tn2で1を返す
+            if($tn2===false or $tn2===null){return 1;}//割と、falseとかnullとか出力するからなあ、実際。
+            if($tn1===false or $tn1===null){return -1;}
+            if($tn1>$tn2){return 1;}
+            elseif($tn1<$tn2){return -1;}
+            else{return 0;}
+        }
+        protected function compare($tn1,$tn2):int{//rule=2で使用する内容比較メソッド、オーバーライド用
+            if($tn2===false or $tn2===null){return 1;}
+            if($tn1===false or $tn1===null){return -1;}
+            if(is_array($tn1)){
+                $tn1=count($tn1);
+                $tn2=count($tn2);
+            }
+            if($tn1>$tn2){return 1;}
+            elseif($tn1<$tn2){return -1;}
+            else{return 0;}
+        }
+        //$oldがfalseでない前提で、ruleごとに更新の必要があるかどうかを判定する
+        //compareはこの形でのみ使用する。
+        protected final function isNeed($new,$old,?int $rule=null):bool{
+            if($rule===null){$rule=$this->rule;}
+            if($rule===0){
+                return false;
+            }elseif($rule===1 and $this->compare1($new,$old)>0){
+                return true;
+            }elseif($rule===-1 and $this->compare1($new,$old)<0){
+                return true;
+            }elseif($rule===2 and $this->compare($new,$old)>0){
+                return true;
+            }elseif($rule===-2 and $this->compare($new,$old)<0){
+                return true;
+            }
+            return false;
+        }
+        public function read(int|string $tn):mixed{//メモに存在すれば内容を、無ければfalseを返す
+            if(array_key_exists($tn,$this->memo)){
+                return $this->memo[$tn];
+            }else{
+                return false;
+            }
+        }
+        //メモに書き込む。条件0で新規なら、-1でより小さければ、1でより大きければ
+        //-2でcompareで-1なら、2でcompareで1なら
+        //変更有りならtrue、変更無しならfalseを返す
+        public function write(int|string $tn,mixed $value,?int $rule=null):bool{
+            if($rule===null){$rule=$this->rule;}
+
+            if(!array_key_exists($tn,$this->memo)){
+                $this->memo[$tn]=$value;
+                return true;
+            }else{
+                if($this->isNeed($value,$this->memo[$tn],$rule)){
+                    $this->memo[$tn]=$value;
+                    return true;
+                }else{
+                    return false;
+                }
+            }
+        }
+    }
+    class a_1{//isNeedを書き下した速度比較対象
+        protected $memo;//メモ本体
+        public const TYPE="a";
+        //protected $rule;//基本ルール
+        public function __construct(protected $rule=0){
+            $this->memo=array();
+        }
+        protected final function compare1($tn1,$tn2):int{//rule=1で使用する内容比較メソッド　tn1>tn2で1を返す
+            if($tn2===false or $tn2===null){return 1;}//割と、falseとかnullとか出力するからなあ、実際。
+            if($tn1===false or $tn1===null){return -1;}
+            if($tn1>$tn2){return 1;}
+            elseif($tn1<$tn2){return -1;}
+            else{return 0;}
+        }
+        protected function compare($tn1,$tn2):int{//rule=2で使用する内容比較メソッド、オーバーライド用
+            if($tn2===false or $tn2===null){return 1;}
+            if($tn1===false or $tn1===null){return -1;}
+            if(is_array($tn1)){
+                $tn1=count($tn1);
+                $tn2=count($tn2);
+            }
+            if($tn1>$tn2){return 1;}
+            elseif($tn1<$tn2){return -1;}
+            else{return 0;}
+        }
+        public function read(int|string $tn):mixed{//メモに存在すれば内容を、無ければfalseを返す
+            if(array_key_exists($tn,$this->memo)){
+                return $this->memo[$tn];
+            }else{
+                return false;
+            }
+        }
+        //メモに書き込む。条件0で新規なら、-1でより小さければ、1でより大きければ
+        //-2でcompareで-1なら、2でcompareで1なら
+        //変更有りならtrue、変更無しならfalseを返す
+        public function write(int|string $tn,mixed $value,?int $rule=null):bool{
+            if($rule===null){$rule=$this->rule;}
+
+            if(!array_key_exists($tn,$this->memo)){
+                $this->memo[$tn]=$value;
+                return true;
+            }else{
+                if($rule===0){
+                    return false;
+                }elseif($rule===1 and $this->compare1($value,$this->memo[$tn])>0){
+                    $this->memo[$tn]=$value;
+                    return true;
+                }elseif($rule===-1 and $this->compare1($value,$this->memo[$tn])<0){
+                    $this->memo[$tn]=$value;
+                    return true;
+                }elseif($rule===2 and $this->compare($value,$this->memo[$tn])>0){
+                    $this->memo[$tn]=$value;
+                    return true;
+                }elseif($rule===-2 and $this->compare($value,$this->memo[$tn])<0){
+                    $this->memo[$tn]=$value;
+                    return true;
+                }
+                return false;
+            }
+        }
+    }
+    class a0{//よく考えたら、compare複数持つ必要ないのではと思って簡略化。
+        protected $memo;//メモ本体
+        public const TYPE="a";
+        //protected $rule;//基本ルール
+        public function __construct(protected $rule=0){
+            $this->memo=array();
+        }
+        protected function compare($tn1,$tn2):int{//rule=1で使用する内容比較メソッド　片方がnullならもう片方を、それ以外ならtn1>tn2で1を返す
+            if($tn2===null){return 1;}
+            if($tn1===null){return -1;}
+            if($tn1>$tn2){return 1;}
+            if($tn1<$tn2){return -1;}
+            return 0;
+        }
+        public function read(int|string $tn):mixed{//メモに存在すれば内容を、無ければfalseを返す
+            if(array_key_exists($tn,$this->memo)){
+                return $this->memo[$tn];
+            }else{
+                return false;
+            }
+        }
+        //メモに書き込む。条件0で新規なら、-1でより小さければ、1でより大きければ
+        //変更有りならtrue、変更無しならfalseを返す
+        public function write(int|string $tn,mixed $value,?int $rule=null):bool{
+            if($rule===null){$rule=$this->rule;}
+
+            if(!array_key_exists($tn,$this->memo)){
+                $this->memo[$tn]=$value;
+                return true;
+            }elseif($rule===0){
+                return false;
+            }else{
+                if($rule===1){
+                    if($this->compare($value,$this->memo[$tn]) > 0){
+                        $this->memo[$tn]=$value;
+                        return true;
+                    }else{
+                        return false;
+                    }
+                }elseif($rule===-1){
+                    if($this->compare($value,$this->memo[$tn]) < 0){
+                        $this->memo[$tn]=$value;
+                        return true;
+                    }else{
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+    class a_n{//rule毎に別クラス化。新規のみ書き込みパターン
+        protected $memo;//メモ本体
+        public const TYPE="a_n";
+        //protected $rule;//基本ルール
+        public function __construct(){
+            $this->memo=array();
+        }
+        public function read(int|string $tn):mixed{//メモに存在すれば内容を、無ければfalseを返す
+            if(array_key_exists($tn,$this->memo)){
+                return $this->memo[$tn];
+            }else{
+                return false;
+            }
+        }
+        //変更有りならtrue、変更無しならfalseを返す
+        public function write(int|string $tn,mixed $value):bool{
+            if(!array_key_exists($tn,$this->memo)){
+                $this->memo[$tn]=$value;
+                return true;
+            }else{
+                return false;
+            }
+        }
+    }
+    class a_w{//rule毎に別クラス化。常に上書きパターン　クラス作る意味あるのか分からんけども。
+        protected $memo;//メモ本体
+        public const TYPE="a_n";
+        //protected $rule;//基本ルール
+        public function __construct(){
+            $this->memo=array();
+        }
+        public function read(int|string $tn):mixed{//メモに存在すれば内容を、無ければfalseを返す
+            if(array_key_exists($tn,$this->memo)){
+                return $this->memo[$tn];
+            }else{
+                return false;
+            }
+        }
+        //常に変更有りなのでtrueを返す
+        public function write(int|string $tn,mixed $value):bool{
+            $this->memo[$tn]=$value;
+            return true;
+        }
+    }
+    class a_h{//rule毎に別クラス化。compare(new,old)>0で上書きパターン
+        protected $memo;//メモ本体
+        public const TYPE="a_h";
+        //protected $rule;//基本ルール
+        public function __construct(){
+            $this->memo=array();
+        }
+        protected function compare($tn1,$tn2):int{//rule=1で使用する内容比較メソッド　片方がnullならもう片方を、それ以外ならtn1>tn2で1を返す
+            if($tn2===null){return 1;}
+            if($tn1===null){return -1;}
+            if($tn1>$tn2){return 1;}
+            if($tn1<$tn2){return -1;}
+            return 0;
+        }
+        public function read(int|string $tn):mixed{//メモに存在すれば内容を、無ければfalseを返す
+            if(array_key_exists($tn,$this->memo)){
+                return $this->memo[$tn];
+            }else{
+                return false;
+            }
+        }
+        //メモに書き込む。変更有りならtrue、変更無しならfalseを返す
+        public function write(int|string $tn,mixed $value):bool{
+            if(array_key_exists($tn,$this->memo) and $this->compare($value,$this->memo[$tn]) <= 0){
+                return false;
+            }
+            $this->memo[$tn]=$value;
+            return true;
+        }
+    }
+    class a_l{//rule毎に別クラス化。compare(new,old)<0で上書きパターン
+        protected $memo;//メモ本体
+        public const TYPE="a_h";
+        //protected $rule;//基本ルール
+        public function __construct(){
+            $this->memo=array();
+        }
+        protected function compare($tn1,$tn2):int{//rule=1で使用する内容比較メソッド　片方がnullならもう片方を、それ以外ならtn1>tn2で1を返す
+            if($tn2===null){return 1;}
+            if($tn1===null){return -1;}
+            if($tn1>$tn2){return 1;}
+            if($tn1<$tn2){return -1;}
+            return 0;
+        }
+        public function read(int|string $tn):mixed{//メモに存在すれば内容を、無ければfalseを返す
+            if(array_key_exists($tn,$this->memo)){
+                return $this->memo[$tn];
+            }else{
+                return false;
+            }
+        }
+        //メモに書き込む。変更有りならtrue、変更無しならfalseを返す
+        public function write(int|string $tn,mixed $value):bool{
+            if(array_key_exists($tn,$this->memo) and $this->compare($value,$this->memo[$tn]) >= 0){
+                return false;
+            }
+            $this->memo[$tn]=$value;
+            return true;
+        }
+    }
+
+    class node_b {
+        //public $value;//範囲の値
+        //public $lower;//範囲の下限
+        //public $upper;//範囲の上限
+        public $prev;//一つ下の範囲オブジェクト
+        public $next;//一つ上の範囲オブジェクト
+        //public $prev_upper;//prevの上限　これある方が速いんだろうか。そんなに参照回数ないかな……?
+        //public $next_lower;//nextの下限
+        public function __construct(public $value,public $lower=null,public $upper=null){}
+    }
+    class b{//整数範囲型　lowerからupperまではvalueの値、というタイプのメモ
+        protected $R;//Rは一番下の範囲オブジェクトとする
+        protected $cn;//無限ループ防止用に、範囲オブジェクト数をカウントしておく
+        public const TYPE="b";
+        public function __construct(protected $rule=0,protected $fill=false){
+            $this->cn=0;
+        }
+        protected function compare($tn1,$tn2):int{//rule=1で使用する内容比較メソッド　tn1>tn2で1を返す
+            if($tn2===null){return 1;}//割と、falseとかnullとか出力するからなあ、実際。
+            if($tn1===null){return -1;}//とはいえ、メモに存在しない場合にfalseを返すので、メモにfalseを入れてはいけない。
+            if($tn1>$tn2){return 1;}
+            elseif($tn1<$tn2){return -1;}
+            else{return 0;}
+        }
+        protected function join(?node_b $node, ?int $rule=null){//nodeをnextと接続する必要があるなら接続、writeの一部
+            //echo"join\n";
+            //$this->printList();
+            if($node===null or $node->next===null){return;}
+            if($rule===null){$rule=$this->rule;}
+            if($node->upper+1!=$node->next->lower){return;}//隣接してないなら接続しない
+            if($this->compare($node->value,$node->next->value)!==0){return;}//両方存在して隣接しているので、後は同値なら接続
+            $node->upper=$node->next->upper;
+            $node->next=$node->next->next;
+            if($node->next!==null){
+                $node->next->prev=$node;
+            }
+            $this->cn--;
+        }
+        protected function possess(int $tn):array|node_b {//メモに存在すればその範囲オブジェクトを、無ければ両脇の範囲オブジェクトを返す
+            $node=$this->R;
+            for($i1=0;$i1<$this->cn;$i1++){
+                if($tn<$node->lower){
+                    return array($node->prev,$node);
+                }elseif($tn<=$node->upper){
+                    return $node;
+                }else{
+                    if($node->next===null){
+                        return array($node,null);
+                    }else{
+                        $node=$node->next;
+                    }
+                }
+            }
+            //return array(null,null);//$this->cn===0の場合の処理→特例処理になるので不要
+        }
+        //メモに存在すれば内容を、無ければfalseを返す。
+        //ただし、fill=trueで範囲の間なら、より優先度の低い方を返す。
+        public function read(int|string $tn, ?bool $fill=null):mixed{
+            if($fill===null){$fill=$this->fill;}
+            $rt=$this->possess($tn);
+            if(is_array($rt)){
+                if($fill===false){return false;}
+                if($rt[0]===null or $rt[1]===null){return false;}
+                if($this->isNeed($rt[0]->value,$rt[1]->value)){
+                    return $rt[1]->value;
+                }else{
+                    return $rt[0]->value;
+                }
+            }else{
+                return $rt->value;
+            }
+        }
+
+        //メモに書き込む。条件0で新規なら、-1でより小さければ、1でより大きければ
+        //変更有りならtrue、変更無しならfalseを返す
+        public function write(int|string $tn, $value, ?int $rule=null):bool{
+            //echo "write $tn $value\n";
+            if($rule===null){$rule=$this->rule;}
+            if($this->R===null){//最初の一回は$this->Rを設定する特例処理
+                $this->R=new node_b($value,$tn,$tn);
+                $this->cn++;
+                return true;
+            }
+
+            $rt=$this->possess($tn);
+            //var_dump($rt);
+            if(is_array($rt)){//空きスペースに追加の場合
+                //echo"new\n";
+                $otnode=new node_b($value,$tn,$tn);
+                $this->cn++;//確かにノード自体はここで作るんだけど、ここで加算すると、まだ$this->Rからのリンクに追加されていないので、デバッグ用のprintListがバグるタイミングができる。
+                if($rt[0]!==null){
+                    //echo"join lower\n";
+                    $rt[0]->next=$otnode;
+                    $otnode->prev=$rt[0];//このタイミングで、(存在すれば)$rt[1]が$this->Rからのリンクから消えてしまう。
+                    //$this->join($rt[0],$rule);//また、このjoinで$otnodeが無くなることがある。よって、このタイミングで$rt[0]をjoinしてはいけない。
+                }
+                if($rt[1]!==null){
+                    //echo"join upper\n";
+                    $rt[1]->prev=$otnode;
+                    $otnode->next=$rt[1];
+                    if($rt[1]===$this->R){$this->R=$otnode;}//下に追加したら、$this->Rの更新が必要。
+                    $this->join($otnode,$rule);
+                }
+                //$this->cn++;//この辺も厳密にはこのタイミングでやるのが正しくはあるが、まあ結果的に今の位置で同じ結果にはなる。
+                //$this->join($otnode,$rule);
+                $this->join($rt[0],$rule);//正しい位置はここ。
+
+            }else{//既存範囲に追加の場合
+                if($rule===0){return false;}//上書きしないなら終了
+                if($rule===1 and $this->compare($value,$rt->value)<=0){return false;}
+                if($rule===-1 and $this->compare($value,$rt->value)>=0){return false;}
+
+                $otck0=false;//下方向のjoinの必要性
+                $otck1=false;//上方向のjoinの必要性
+                //echo"devide lower\n";
+                if($rt->lower!==$tn){
+                    $otnode=new node_b($rt->value,$rt->lower,$tn-1);
+                    $rt->lower=$tn;
+                    if($rt->prev!==null){
+                        $otnode->prev=$rt->prev;
+                        $rt->prev->next=$otnode;
+                    }
+                    $otnode->next=$rt;
+                    $rt->prev=$otnode;
+                    $this->cn++;
+                    if($rt===$this->R){$this->R=$otnode;}//下に追加したら、$this->Rの更新が必要。
+                }else{
+                    $otck0=true;
+                }
+                //echo"devide upper\n";
+                if($rt->upper!==$tn){
+                    $otnode=new node_b($rt->value,$tn+1,$rt->upper);
+                    $rt->upper=$tn;
+                    if($rt->next!==null){
+                        $otnode->next=$rt->next;
+                        $rt->next->prev=$otnode;
+                    }
+                    $otnode->prev=$rt;
+                    $rt->next=$otnode;
+                    $this->cn++;
+                }else{
+                    $otck1=true;
+                }
+
+                $rt->value=$value;//join前にvalueを更新するのが必須
+
+                if($otck1){$this->join($rt);}//下方向joinすると$rtが消えてしまうので、上方向joinを先に実行
+                if($rt->prev!==null and $otck0){$this->join($rt->prev);}
+            }
+            return true;
+        }
+        public function getList(){
+            $d2_rt=array();
+            $node=$this->R;
+            for($i1=0;$i1<$this->cn;$i1++){
+                $d2_rt[]=array($node->lower,$node->upper,$node->value);
+                $node=$node->next;
+            }
+            return $d2_rt;
+        }
+        public function printList(){
+            echo "cn=".$this->cn."\n";
+            $node=$this->R;
+            for($i1=0;$i1<$this->cn;$i1++){
+                echo $node->lower." ".$node->upper." ".$node->value."\n";
+                $node=$node->next;
+            }
+            echo "\n";
+        }
+    }
+    class c{//複数の組み合わせごとにメモする場合。次数不定のツリー型メモ
+        protected $dn_tree;
+        public const TYPE="c";
+        //protected $name;//次数不定メモの場合、捜査対象は専用の名前のキーに入れる
+        //位置配列引数の末尾を固定するのと同じなので、不要と言えば不要
+        public function __construct(protected $rule=0,protected $name=null){
+            $this->dn_tree=array();
+        }
+        protected function compare($tn1,$tn2):int{//rule=2で使用する内容比較メソッド、オーバーライド用
+            if(is_array($tn1)){
+                $tn1=count($tn1);
+                $tn2=count($tn2);
+            }
+            if($tn1>$tn2){return 1;}
+            elseif($tn1<$tn2){return -1;}
+            else{return 0;}
+        }
+
+        public function read(array $d1_t):mixed{//メモに存在すれば内容を、無ければfalseを返す
+            $otar=$this->dn_tree;
+            $cn=count($d1_t);
+            for($i1=0;$i1<$cn;$i1++){
+                if(!array_key_exists($d1_t[$i1],$otar)){return false;}
+                $otar=$otar[$d1_t[$i1]];
+            }
+
+            if($this->name===null){
+                return $otar; 
+            }else{
+                return $otar[$this->name];
+            }
+        }
+        //メモに書き込む。条件0で新規なら、-1でより小さければ、1でより大きければ
+        //-2でcompareで-1なら、2でcompareで1なら
+        //変更有りならtrue、変更無しならfalseを返す
+        public function write(array $d1_t,$value,?int $rule=null):bool{
+            if($rule===null){$rule=$this->rule;}
+            $otar=&$this->dn_tree;
+            $otck=false;//新規の値か否か
+            $cn=count($d1_t);
+            for($i1=0;$i1<$cn;$i1++){
+                if(!array_key_exists($d1_t[$i1],$otar)){
+                    $otar[$d1_t[$i1]]=array();
+                    $otck=true;
+                }
+                $otar=&$otar[$d1_t[$i1]];
+            }
+            if($this->name!==null){
+                $otar=&$otar[$this->name];//リファレンス代入だと、存在しないキーに代入してもエラー出ないんだね……。
+                $otck=true;
+            }
+
+            //ruleに基づいて、書き込むかfalseを返す
+            if($otck){//完全新規なら無条件で書き込み
+                $otar=$value;
+            }elseif($rule==0){//rule=0なら、完全新規でない時点でfalse
+                return false;
+            }elseif($rule==1){
+                if(is_array($value)){
+                    if(count($otar)<count($value)){
+                        $otar=$value;
+                    }else{
+                        return false;
+                    }
+                }else{
+                    if($otar<$value){
+                        $otar=$value;
+                    }else{
+                        return false;
+                    }
+                }
+            }
+            elseif($rule==-1){
+                if(is_array($value)){
+                    if(count($otar)>count($value)){
+                        $otar=$value;
+                    }else{
+                        return false;
+                    }
+                }
+                else{
+                    if($otar>$value){
+                        $otar=$value;
+                    }else{
+                        return false;
+                    }
+                }
+            }elseif($rule==2){
+                if($this->compare($otar,$value)<0){
+                    $otar=$value;
+                    }else{
+                    return false;
+                }
+            }elseif($rule==-2){
+                if($this->compare($otar,$value)>0){
+                    $otar=$value;
+                    }else{
+                    return false;
+                }
+            }
+            unset($otar);//リファレンスは使い終わった時点でunsetしておかないと不安。
+            
+            return true;
+        }
+    }
+    class c0{//とりあえず、compareを一種に絞ったタイプ。
+        protected $dn_tree;
+        public const TYPE="c0";
+        //protected $name;//次数不定メモの場合、捜査対象は専用の名前のキーに入れる
+        //位置配列引数の末尾を固定するのと同じなので、不要と言えば不要
+        public function __construct(protected $rule=0,protected $name=null){
+            $this->dn_tree=array();
+        }
+        protected function compare($tn1,$tn2):int{//rule=2で使用する内容比較メソッド、オーバーライド用
+            if($tn2===null){return 1;}
+            elseif($tn1===null){return -1;}
+            elseif($tn1>$tn2){return 1;}
+            elseif($tn1<$tn2){return -1;}
+            else{return 0;}
+        }
+
+        public function read(array $d1_t):mixed{//メモに存在すれば内容を、無ければfalseを返す
+            $otar=$this->dn_tree;
+            $cn=count($d1_t);
+            for($i1=0;$i1<$cn;$i1++){
+                if(!array_key_exists($d1_t[$i1],$otar)){return false;}
+                $otar=$otar[$d1_t[$i1]];
+            }
+
+            if($this->name===null){
+                return $otar; 
+            }else{
+                return $otar[$this->name];
+            }
+        }
+        //メモに書き込む。条件0で新規なら、-1でより小さければ、1でより大きければ
+        //変更有りならtrue、変更無しならfalseを返す
+        public function write(array $d1_t,$value,?int $rule=null):bool{
+            if($rule===null){$rule=$this->rule;}
+            $otar=&$this->dn_tree;
+            $cn=count($d1_t);
+            for($i1=0;$i1<$cn;$i1++){
+                if(!array_key_exists($d1_t[$i1],$otar)){
+                    $otar[$d1_t[$i1]]=array();
+                }
+                $otar=&$otar[$d1_t[$i1]];
+            }
+            if($this->name!==null){
+                $otar=&$otar[$this->name];//リファレンス代入だと、存在しないキーに代入してもエラー出ないんだね……。
+            }
+
+            //ruleに基づいて、書き込むかfalseを返す
+            if($otar===null){//完全新規なら無条件で書き込み
+                $otar=$value;
+            }elseif($rule===0){//rule=0なら、完全新規でない時点でfalse
+                return false;
+            }elseif($rule===1){
+                if($this->compare($value,$otar)>0){
+                    $otar=$value;
+                    }else{
+                    return false;
+                }
+            }elseif($rule===-1){
+                if($this->compare($value,$otar)<0){
+                    $otar=$value;
+                    }else{
+                    return false;
+                }
+            }
+            unset($otar);//リファレンスは使い終わった時点でunsetしておかないと不安。
+            
+            return true;
+        }
+    }
+    class c_n{//rule毎に別クラス化。新規のみ書き込みパターン
+        protected $dn_tree;
+        public const TYPE="c0";
+        //protected $name;//次数不定メモの場合、捜査対象は専用の名前のキーに入れる
+        //位置配列引数の末尾を固定するのと同じなので、不要と言えば不要
+        public function __construct(protected $rule=0,protected $name=null){
+            $this->dn_tree=array();
+        }
+        public function read(array $d1_t):mixed{//メモに存在すれば内容を、無ければfalseを返す
+            $otar=$this->dn_tree;
+            $cn=count($d1_t);
+            for($i1=0;$i1<$cn;$i1++){
+                if(!array_key_exists($d1_t[$i1],$otar)){return false;}
+                $otar=$otar[$d1_t[$i1]];
+            }
+
+            if($this->name===null){
+                return $otar; 
+            }else{
+                return $otar[$this->name];
+            }
+        }
+        //変更有りならtrue、変更無しならfalseを返す
+        public function write(array $d1_t,$value):bool{
+            $otar=&$this->dn_tree;
+            $cn=count($d1_t);
+            $otck=false;
+            for($i1=0;$i1<$cn;$i1++){
+                if(!array_key_exists($d1_t[$i1],$otar)){
+                    $otar[$d1_t[$i1]]=array();
+                    $otck=true;
+                }
+                $otar=&$otar[$d1_t[$i1]];
+            }
+            if($this->name!==null){
+                $otar=&$otar[$this->name];//リファレンス代入だと、存在しないキーに代入してもエラー出ないんだね……。
+                $otck=true;
+            }
+
+            if($otck){//完全新規なら書き込み　例えnullでも既存なら上書きしない
+                $otar=$value;
+                return true;
+            }else{
+                return false;
+            }
+        }
+    }
+    class c_w{//rule毎に別クラス化。常に上書きパターン
+        protected $dn_tree;
+        public const TYPE="c0";
+        //protected $name;//次数不定メモの場合、捜査対象は専用の名前のキーに入れる
+        //位置配列引数の末尾を固定するのと同じなので、不要と言えば不要
+        public function __construct(protected $rule=0,protected $name=null){
+            $this->dn_tree=array();
+        }
+        public function read(array $d1_t):mixed{//メモに存在すれば内容を、無ければfalseを返す
+            $otar=$this->dn_tree;
+            $cn=count($d1_t);
+            for($i1=0;$i1<$cn;$i1++){
+                if(!array_key_exists($d1_t[$i1],$otar)){return false;}
+                $otar=$otar[$d1_t[$i1]];
+            }
+
+            if($this->name===null){
+                return $otar; 
+            }else{
+                return $otar[$this->name];
+            }
+        }
+        //変更有りならtrue、変更無しならfalseを返す
+        public function write(array $d1_t,$value):bool{
+            $otar=&$this->dn_tree;
+            $cn=count($d1_t);
+            for($i1=0;$i1<$cn;$i1++){
+                if(!array_key_exists($d1_t[$i1],$otar)){
+                    $otar[$d1_t[$i1]]=array();
+                }
+                $otar=&$otar[$d1_t[$i1]];
+            }
+            if($this->name!==null){
+                $otar=&$otar[$this->name];//リファレンス代入だと、存在しないキーに代入してもエラー出ないんだね……。
+            }
+
+            $otar=$value;
+            return true;
+        }
+    }
+    class c_h{//rule毎に別クラス化。compare(new,old)>0で上書きパターン
+        protected $dn_tree;
+        public const TYPE="c0";
+        //protected $name;//次数不定メモの場合、捜査対象は専用の名前のキーに入れる
+        //位置配列引数の末尾を固定するのと同じなので、不要と言えば不要
+        public function __construct(protected $name=null){
+            $this->dn_tree=array();
+        }
+        protected function compare($tn1,$tn2):int{//rule=2で使用する内容比較メソッド、オーバーライド用
+            if($tn2===null){return 1;}
+            elseif($tn1===null){return -1;}
+            elseif($tn1>$tn2){return 1;}
+            elseif($tn1<$tn2){return -1;}
+            else{return 0;}
+        }
+
+        public function read(array $d1_t):mixed{//メモに存在すれば内容を、無ければfalseを返す
+            $otar=$this->dn_tree;
+            $cn=count($d1_t);
+            for($i1=0;$i1<$cn;$i1++){
+                if(!array_key_exists($d1_t[$i1],$otar)){return false;}
+                $otar=$otar[$d1_t[$i1]];
+            }
+
+            if($this->name===null){
+                return $otar; 
+            }else{
+                return $otar[$this->name];
+            }
+        }
+        //変更有りならtrue、変更無しならfalseを返す
+        public function write(array $d1_t,$value):bool{
+            $otar=&$this->dn_tree;
+            $cn=count($d1_t);
+            for($i1=0;$i1<$cn;$i1++){
+                if(!array_key_exists($d1_t[$i1],$otar)){
+                    $otar[$d1_t[$i1]]=array();
+                }
+                $otar=&$otar[$d1_t[$i1]];
+            }
+            if($this->name!==null){
+                $otar=&$otar[$this->name];//リファレンス代入だと、存在しないキーに代入してもエラー出ないんだね……。
+            }
+
+            if($otar===null or $this->compare($value,$otar)>0){
+                $otar=$value;
+                return true;
+            }else{
+                return false;
+            }
+        }
+    }
+    class c_l{//rule毎に別クラス化。compare(new,old)<0で上書きパターン
+        protected $dn_tree;
+        public const TYPE="c0";
+        //protected $name;//次数不定メモの場合、捜査対象は専用の名前のキーに入れる
+        //位置配列引数の末尾を固定するのと同じなので、不要と言えば不要
+        public function __construct(protected $name=null){
+            $this->dn_tree=array();
+        }
+        protected function compare($tn1,$tn2):int{//rule=2で使用する内容比較メソッド、オーバーライド用
+            if($tn2===null){return 1;}
+            elseif($tn1===null){return -1;}
+            elseif($tn1>$tn2){return 1;}
+            elseif($tn1<$tn2){return -1;}
+            else{return 0;}
+        }
+
+        public function read(array $d1_t):mixed{//メモに存在すれば内容を、無ければfalseを返す
+            $otar=$this->dn_tree;
+            $cn=count($d1_t);
+            for($i1=0;$i1<$cn;$i1++){
+                if(!array_key_exists($d1_t[$i1],$otar)){return false;}
+                $otar=$otar[$d1_t[$i1]];
+            }
+
+            if($this->name===null){
+                return $otar; 
+            }else{
+                return $otar[$this->name];
+            }
+        }
+        //変更有りならtrue、変更無しならfalseを返す
+        public function write(array $d1_t,$value):bool{
+            $otar=&$this->dn_tree;
+            $cn=count($d1_t);
+            for($i1=0;$i1<$cn;$i1++){
+                if(!array_key_exists($d1_t[$i1],$otar)){
+                    $otar[$d1_t[$i1]]=array();
+                }
+                $otar=&$otar[$d1_t[$i1]];
+            }
+            if($this->name!==null){
+                $otar=&$otar[$this->name];//リファレンス代入だと、存在しないキーに代入してもエラー出ないんだね……。
+            }
+
+            if($otar===null or $this->compare($value,$otar)<0){
+                $otar=$value;
+                return true;
+            }else{
+                return false;
+            }
+        }
+    }
+}
+namespace{
+    // //メモaで実験。isNeedを置くのと書き下すのとで、どの程度速度差が出るか。
+    // //百万回の書き込みで0.1秒に届かないなら、完全無視でいいと思う。
+    // $ln_k=1000;
+    // $ln_v=1000;
+    // $ln_l=1000000;
+    // $rule=1;
+    // timecheck();
+    // $test=new \crast\memo\a0($rule);
+    // for($i1=0;$i1<$ln_l;$i1++){$test->write(rand(1,$ln_k),rand(1,$ln_v));}
+    // timeCheck();
+    // $test=new \crast\memo\a_h($rule);
+    // for($i1=0;$i1<$ln_l;$i1++){$test->write(rand(1,$ln_k),rand(1,$ln_v));}
+    // timeCheck();
+    // $test=new \crast\memo\a_h($rule);
+    // for($i1=0;$i1<$ln_l;$i1++){$test->write(rand(1,$ln_k),rand(1,$ln_v));}
+    // timeCheck();
+    // $test=new \crast\memo\a0($rule);
+    // for($i1=0;$i1<$ln_l;$i1++){$test->write(rand(1,$ln_k),rand(1,$ln_v));}
+    // timeCheck();
+    // // // $ln_k=1000;
+    // // $ln_v=1000;
+    // // $ln_l=1000000;
+    // // $rule=1;
+    // //結果は、
+    // // time_0.399
+    // // time_0.355
+    // // time_0.354
+    // // time_0.399
+    // //という感じで、1割以上は速度変わるとはいえ、百万回で0.05秒に満たないなら、そこまで徹底的に潰す必要は無いかな。
+    // //ちょっと面白いことに、$rule=-2だと、
+    // // time_0.408
+    // // time_0.373
+    // // time_0.369
+    // // time_0.408
+    // //と、差が縮まる。なんでだろうなこれ。
+    // //しかし、これだと、ほんとに最小限だけにすれば目に見えて早くなるのでは。
+    // //いやまあ、ほんとに最小限にするなら、クラスとか作らずに直接書けって話しよな、この程度なら。
+    //aをa0にして再テスト。メモ複数種作るんなら、compare複数用意する必要ないよな。
+    // time_0.26<br>
+    // time_0.356<br>
+    // time_0.357<br>
+    // time_0.259<br>
+    //わー圧倒的に速い。無駄を省くのは大事やなー。
+    //とはいえ、クラスとして作るからには、compareをオーバーライドしていろいろ使えるようにするのは大事。
+    //配列の特定のキーに入れた値で更新とか、オブジェクトの特定のプロパティで更新とか、使い方はいろいろある。
+    //それら全部に専用クラスを作った方が速いんだろうけど、それならライブラリじゃなくて内部コード書くわって話だし。
+    //とりあえず、rule毎に別クラス作る方向では行ってみよう。
+    //a0とa_hで速度比較。
+    // time_0.268
+    // time_0.222
+    // time_0.222
+    // time_0.259
+    //大差ではないけど、早くはなってる。
+    //大差ではないので、rule別に作るのは必須ではないのかもしれない。
+
+    
+}
+namespace{
+    //bがちゃんと動いているかの確認。
+    // $test=new \crast\memo\b(1);
+    // $test->write(0,1);
+    // $test->write(1,2);
+    // $test->write(2,1);
+    // $test->write(3,1);
+    // $test->write(4,1);
+    // $test->write(5,1);
+    // $test->write(3,2);
+    // $test->write(2,2);
+    // $test->printList();
+    //devide後のjoinとvalue更新の順番を正しくするまでだいぶかかったけど、まあ何とかなったからよし。
+    //あー、$this->Rの更新忘れてたかー。上にばかり追加してるとチェックできんな確かに。
+
+    //速度チェックというか、作っては見たものの、範囲型のメモの方が速い場合ってあるの？という話。
+    // srand(0);
+    // $ln_k=10000;
+    // $ln_v=2;
+    // $ln_l=1000000;
+    // $rule=1;
+    // timecheck();
+    // $test=new \crast\memo\b($rule);
+    // for($i1=0;$i1<$ln_l;$i1++){$test->write(rand(1,$ln_k),rand(1,$ln_v));}
+    // timeCheck();
+    // memorycheck(true);
+    // memorycheck();
+    // $test=new \crast\memo\a_h();
+    // for($i1=0;$i1<$ln_l;$i1++){$test->write(rand(1,$ln_k),rand(1,$ln_v));}
+    // timeCheck();
+    // memorycheck(true);
+    // memorycheck();
+    // $test=new \crast\memo\a_h();
+    // for($i1=0;$i1<$ln_l;$i1++){$test->write(rand(1,$ln_k),rand(1,$ln_v));}
+    // timeCheck();
+    // $test=new \crast\memo\b($rule);
+    // for($i1=0;$i1<$ln_l;$i1++){$test->write(rand(1,$ln_k),rand(1,$ln_v));}
+    // timeCheck();
+    //1or2を、一万個管理するみたいな状況でダメなら、もう使う意味ないんじゃないかな。
+    // _time__4.115<br>
+    // memory_0.497<br>
+    // memory_1.036<br>
+    // _time__0.231<br>
+    // memory_1.122<br>
+    // memory_1.435<br>
+    // _time__0.232<br>
+    // _time__4.212<br>
+    //はい、遅すぎて話にならない。解散。
+    //メモリ使用量若干減ってはいるけど、ピークの差がこの程度では使う理由にならんね。
+    //やっぱ配列基本操作は早いんやなというか、よほどアルゴリズムで高速化しない限りオブジェクト構造はループ内で使いたくないというか。
+    //それでも有用なヒープは、結構凄いデータ構造なのでは。
+
+}
+
+
+namespace{
+    srand(0);
+    $ln_k=20;
+    $ln_v=1000;
+    $ln_l=1000000;
+    $rule=1;
+    timecheck();
+    $test=new \crast\memo\c($rule,"v");
+    for($i1=0;$i1<$ln_l;$i1++){$test->write(array(rand(1,$ln_k),rand(1,$ln_k),rand(1,$ln_k)),rand(1,$ln_v));}
+    timeCheck();
+    $test=new \crast\memo\c0($rule,"v");
+    for($i1=0;$i1<$ln_l;$i1++){$test->write(array(rand(1,$ln_k),rand(1,$ln_k),rand(1,$ln_k)),rand(1,$ln_v));}
+    timeCheck();
+    $test=new \crast\memo\c_h("v");
+    for($i1=0;$i1<$ln_l;$i1++){$test->write(array(rand(1,$ln_k),rand(1,$ln_k),rand(1,$ln_k)),rand(1,$ln_v));}
+    timeCheck();
+    $test=new \crast\memo\c_h("v");
+    for($i1=0;$i1<$ln_l;$i1++){$test->write(array(rand(1,$ln_k),rand(1,$ln_k),rand(1,$ln_k)),rand(1,$ln_v));}
+    timeCheck();
+    $test=new \crast\memo\c0($rule,"v");
+    for($i1=0;$i1<$ln_l;$i1++){$test->write(array(rand(1,$ln_k),rand(1,$ln_k),rand(1,$ln_k)),rand(1,$ln_v));}
+    timeCheck();
+    $test=new \crast\memo\c($rule,"v");
+    for($i1=0;$i1<$ln_l;$i1++){$test->write(array(rand(1,$ln_k),rand(1,$ln_k),rand(1,$ln_k)),rand(1,$ln_v));}
+    timeCheck();
+    //こっちは速度差どの程度だろうか。
+    // _time__0.68<br>
+    // _time__0.71<br>
+    // _time__0.689<br>
+    // _time__0.688<br>
+    // _time__0.718<br>
+    // _time__0.663<br>
+    //ほとんど差はない感じ。というか、c0だけちょっと遅いのはなんだ一体。
+    //デフォのcだけあれば、十分っぽいな、これ。
+
+}
+
+
+    
+?>
+                if($this->isNeed($value,$this->memo[$tn],$rule)){
+                    $this->memo[$tn]=$value;
+                    return true;
+                }else{
+                    return false;
+                }
+            }
+        }
+    }
+    class a_1{//isNeedを書き下した速度比較対象
+        protected $memo;//メモ本体
+        public const TYPE="a";
+        //protected $rule;//基本ルール
+        public function __construct(protected $rule=0){
+            $this->memo=array();
+        }
+        protected final function compare1($tn1,$tn2):int{//rule=1で使用する内容比較メソッド　tn1>tn2で1を返す
+            if($tn2===false or $tn2===null){return 1;}//割と、falseとかnullとか出力するからなあ、実際。
+            if($tn1===false or $tn1===null){return -1;}
+            if($tn1>$tn2){return 1;}
+            elseif($tn1<$tn2){return -1;}
+            else{return 0;}
+        }
+        protected function compare($tn1,$tn2):int{//rule=2で使用する内容比較メソッド、オーバーライド用
+            if($tn2===false or $tn2===null){return 1;}
+            if($tn1===false or $tn1===null){return -1;}
+            if(is_array($tn1)){
+                $tn1=count($tn1);
+                $tn2=count($tn2);
+            }
+            if($tn1>$tn2){return 1;}
+            elseif($tn1<$tn2){return -1;}
+            else{return 0;}
+        }
+        public function read(int|string $tn):mixed{//メモに存在すれば内容を、無ければfalseを返す
+            if(array_key_exists($tn,$this->memo)){
+                return $this->memo[$tn];
+            }else{
+                return false;
+            }
+        }
+        //メモに書き込む。条件0で新規なら、-1でより小さければ、1でより大きければ
+        //-2でcompareで-1なら、2でcompareで1なら
+        //変更有りならtrue、変更無しならfalseを返す
+        public function write(int|string $tn,mixed $value,?int $rule=null):bool{
+            if($rule===null){$rule=$this->rule;}
+
+            if(!array_key_exists($tn,$this->memo)){
+                $this->memo[$tn]=$value;
+                return true;
+            }else{
+                if($rule===0){
+                    return false;
+                }elseif($rule===1 and $this->compare1($value,$this->memo[$tn])>0){
+                    $this->memo[$tn]=$value;
+                    return true;
+                }elseif($rule===-1 and $this->compare1($value,$this->memo[$tn])<0){
+                    $this->memo[$tn]=$value;
+                    return true;
+                }elseif($rule===2 and $this->compare($value,$this->memo[$tn])>0){
+                    $this->memo[$tn]=$value;
+                    return true;
+                }elseif($rule===-2 and $this->compare($value,$this->memo[$tn])<0){
+                    $this->memo[$tn]=$value;
+                    return true;
+                }
+                return false;
+            }
+        }
+    }
+    class a0{//よく考えたら、compare複数持つ必要ないのではと思って簡略化。
+        protected $memo;//メモ本体
+        public const TYPE="a";
+        //protected $rule;//基本ルール
+        public function __construct(protected $rule=0){
+            $this->memo=array();
+        }
+        protected function compare($tn1,$tn2):int{//rule=1で使用する内容比較メソッド　片方がnullならもう片方を、それ以外ならtn1>tn2で1を返す
+            if($tn2===null){return 1;}
+            if($tn1===null){return -1;}
+            if($tn1>$tn2){return 1;}
+            if($tn1<$tn2){return -1;}
+            return 0;
+        }
+        public function read(int|string $tn):mixed{//メモに存在すれば内容を、無ければfalseを返す
+            if(array_key_exists($tn,$this->memo)){
+                return $this->memo[$tn];
+            }else{
+                return false;
+            }
+        }
+        //メモに書き込む。条件0で新規なら、-1でより小さければ、1でより大きければ
+        //変更有りならtrue、変更無しならfalseを返す
+        public function write(int|string $tn,mixed $value,?int $rule=null):bool{
+            if($rule===null){$rule=$this->rule;}
+
+            if(!array_key_exists($tn,$this->memo)){
+                $this->memo[$tn]=$value;
+                return true;
+            }elseif($rule===0){
+                return false;
+            }else{
+                if($rule===1){
+                    if($this->compare($value,$this->memo[$tn]) > 0){
+                        $this->memo[$tn]=$value;
+                        return true;
+                    }else{
+                        return false;
+                    }
+                }elseif($rule===-1){
+                    if($this->compare($value,$this->memo[$tn]) < 0){
+                        $this->memo[$tn]=$value;
+                        return true;
+                    }else{
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+    class a_n{//rule毎に別クラス化。新規のみ書き込みパターン
+        protected $memo;//メモ本体
+        public const TYPE="a_n";
+        //protected $rule;//基本ルール
+        public function __construct(){
+            $this->memo=array();
+        }
+        public function read(int|string $tn):mixed{//メモに存在すれば内容を、無ければfalseを返す
+            if(array_key_exists($tn,$this->memo)){
+                return $this->memo[$tn];
+            }else{
+                return false;
+            }
+        }
+        //変更有りならtrue、変更無しならfalseを返す
+        public function write(int|string $tn,mixed $value):bool{
+            if(!array_key_exists($tn,$this->memo)){
+                $this->memo[$tn]=$value;
+                return true;
+            }else{
+                return false;
+            }
+        }
+    }
+    class a_w{//rule毎に別クラス化。常に上書きパターン　クラス作る意味あるのか分からんけども。
+        protected $memo;//メモ本体
+        public const TYPE="a_n";
+        //protected $rule;//基本ルール
+        public function __construct(){
+            $this->memo=array();
+        }
+        public function read(int|string $tn):mixed{//メモに存在すれば内容を、無ければfalseを返す
+            if(array_key_exists($tn,$this->memo)){
+                return $this->memo[$tn];
+            }else{
+                return false;
+            }
+        }
+        //常に変更有りなのでtrueを返す
+        public function write(int|string $tn,mixed $value):bool{
+            $this->memo[$tn]=$value;
+            return true;
+        }
+    }
+    class a_h{//rule毎に別クラス化。compare(new,old)>0で上書きパターン
+        protected $memo;//メモ本体
+        public const TYPE="a_h";
+        //protected $rule;//基本ルール
+        public function __construct(){
+            $this->memo=array();
+        }
+        protected function compare($tn1,$tn2):int{//rule=1で使用する内容比較メソッド　片方がnullならもう片方を、それ以外ならtn1>tn2で1を返す
+            if($tn2===null){return 1;}
+            if($tn1===null){return -1;}
+            if($tn1>$tn2){return 1;}
+            if($tn1<$tn2){return -1;}
+            return 0;
+        }
+        public function read(int|string $tn):mixed{//メモに存在すれば内容を、無ければfalseを返す
+            if(array_key_exists($tn,$this->memo)){
+                return $this->memo[$tn];
+            }else{
+                return false;
+            }
+        }
+        //メモに書き込む。変更有りならtrue、変更無しならfalseを返す
+        public function write(int|string $tn,mixed $value):bool{
+            if(array_key_exists($tn,$this->memo) and $this->compare($value,$this->memo[$tn]) <= 0){
+                return false;
+            }
+            $this->memo[$tn]=$value;
+            return true;
+        }
+    }
+    class a_l{//rule毎に別クラス化。compare(new,old)<0で上書きパターン
+        protected $memo;//メモ本体
+        public const TYPE="a_h";
+        //protected $rule;//基本ルール
+        public function __construct(){
+            $this->memo=array();
+        }
+        protected function compare($tn1,$tn2):int{//rule=1で使用する内容比較メソッド　片方がnullならもう片方を、それ以外ならtn1>tn2で1を返す
+            if($tn2===null){return 1;}
+            if($tn1===null){return -1;}
+            if($tn1>$tn2){return 1;}
+            if($tn1<$tn2){return -1;}
+            return 0;
+        }
+        public function read(int|string $tn):mixed{//メモに存在すれば内容を、無ければfalseを返す
+            if(array_key_exists($tn,$this->memo)){
+                return $this->memo[$tn];
+            }else{
+                return false;
+            }
+        }
+        //メモに書き込む。変更有りならtrue、変更無しならfalseを返す
+        public function write(int|string $tn,mixed $value):bool{
+            if(array_key_exists($tn,$this->memo) and $this->compare($value,$this->memo[$tn]) >= 0){
+                return false;
+            }
+            $this->memo[$tn]=$value;
+            return true;
+        }
+    }
+
+    class node_b {
+        //public $value;//範囲の値
+        //public $lower;//範囲の下限
+        //public $upper;//範囲の上限
+        public $prev;//一つ下の範囲オブジェクト
+        public $next;//一つ上の範囲オブジェクト
+        //public $prev_upper;//prevの上限　これある方が速いんだろうか。そんなに参照回数ないかな……?
+        //public $next_lower;//nextの下限
+        public function __construct(public $value,public $lower=null,public $upper=null){}
+    }
+    class b{//整数範囲型　lowerからupperまではvalueの値、というタイプのメモ
+        protected $R;//Rは一番下の範囲オブジェクトとする
+        protected $cn;//無限ループ防止用に、範囲オブジェクト数をカウントしておく
+        public const TYPE="b";
+        public function __construct(protected $rule=0,protected $fill=false){
+            $this->cn=0;
+        }
+        protected function compare($tn1,$tn2):int{//rule=1で使用する内容比較メソッド　tn1>tn2で1を返す
+            if($tn2===null){return 1;}//割と、falseとかnullとか出力するからなあ、実際。
+            if($tn1===null){return -1;}//とはいえ、メモに存在しない場合にfalseを返すので、メモにfalseを入れてはいけない。
+            if($tn1>$tn2){return 1;}
+            elseif($tn1<$tn2){return -1;}
+            else{return 0;}
+        }
+        protected function join(?node_b $node, ?int $rule=null){//nodeをnextと接続する必要があるなら接続、writeの一部
+            //echo"join\n";
+            //$this->printList();
+            if($node===null or $node->next===null){return;}
+            if($rule===null){$rule=$this->rule;}
+            if($node->upper+1!=$node->next->lower){return;}//隣接してないなら接続しない
+            if($this->compare($node->value,$node->next->value)!==0){return;}//両方存在して隣接しているので、後は同値なら接続
+            $node->upper=$node->next->upper;
+            $node->next=$node->next->next;
+            if($node->next!==null){
+                $node->next->prev=$node;
+            }
+            $this->cn--;
+        }
+        protected function possess(int $tn):array|node_b {//メモに存在すればその範囲オブジェクトを、無ければ両脇の範囲オブジェクトを返す
+            $node=$this->R;
+            for($i1=0;$i1<$this->cn;$i1++){
+                if($tn<$node->lower){
+                    return array($node->prev,$node);
+                }elseif($tn<=$node->upper){
+                    return $node;
+                }else{
+                    if($node->next===null){
+                        return array($node,null);
+                    }else{
+                        $node=$node->next;
+                    }
+                }
+            }
+            //return array(null,null);//$this->cn===0の場合の処理→特例処理になるので不要
+        }
+        //メモに存在すれば内容を、無ければfalseを返す。
+        //ただし、fill=trueで範囲の間なら、より優先度の低い方を返す。
+        public function read(int|string $tn, ?bool $fill=null):mixed{
+            if($fill===null){$fill=$this->fill;}
+            $rt=$this->possess($tn);
+            if(is_array($rt)){
+                if($fill===false){return false;}
+                if($rt[0]===null or $rt[1]===null){return false;}
+                if($this->isNeed($rt[0]->value,$rt[1]->value)){
+                    return $rt[1]->value;
+                }else{
+                    return $rt[0]->value;
+                }
+            }else{
+                return $rt->value;
+            }
+        }
+
+        //メモに書き込む。条件0で新規なら、-1でより小さければ、1でより大きければ
+        //変更有りならtrue、変更無しならfalseを返す
+        public function write(int|string $tn, $value, ?int $rule=null):bool{
+            //echo "write $tn $value\n";
+            if($rule===null){$rule=$this->rule;}
+            if($this->R===null){//最初の一回は$this->Rを設定する特例処理
+                $this->R=new node_b($value,$tn,$tn);
+                $this->cn++;
+                return true;
+            }
+
+            $rt=$this->possess($tn);
+            //var_dump($rt);
+            if(is_array($rt)){//空きスペースに追加の場合
+                //echo"new\n";
+                $otnode=new node_b($value,$tn,$tn);
+                $this->cn++;//確かにノード自体はここで作るんだけど、ここで加算すると、まだ$this->Rからのリンクに追加されていないので、デバッグ用のprintListがバグるタイミングができる。
+                if($rt[0]!==null){
+                    //echo"join lower\n";
+                    $rt[0]->next=$otnode;
+                    $otnode->prev=$rt[0];//このタイミングで、(存在すれば)$rt[1]が$this->Rからのリンクから消えてしまう。
+                    //$this->join($rt[0],$rule);//また、このjoinで$otnodeが無くなることがある。よって、このタイミングで$rt[0]をjoinしてはいけない。
+                }
+                if($rt[1]!==null){
+                    //echo"join upper\n";
+                    $rt[1]->prev=$otnode;
+                    $otnode->next=$rt[1];
+                    if($rt[1]===$this->R){$this->R=$otnode;}//下に追加したら、$this->Rの更新が必要。
+                    $this->join($otnode,$rule);
+                }
+                //$this->cn++;//この辺も厳密にはこのタイミングでやるのが正しくはあるが、まあ結果的に今の位置で同じ結果にはなる。
+                //$this->join($otnode,$rule);
+                $this->join($rt[0],$rule);//正しい位置はここ。
+
+            }else{//既存範囲に追加の場合
+                if($rule===0){return false;}//上書きしないなら終了
+                if($rule===1 and $this->compare($value,$rt->value)<=0){return false;}
+                if($rule===-1 and $this->compare($value,$rt->value)>=0){return false;}
+
+                $otck0=false;//下方向のjoinの必要性
+                $otck1=false;//上方向のjoinの必要性
+                //echo"devide lower\n";
+                if($rt->lower!==$tn){
+                    $otnode=new node_b($rt->value,$rt->lower,$tn-1);
+                    $rt->lower=$tn;
+                    if($rt->prev!==null){
+                        $otnode->prev=$rt->prev;
+                        $rt->prev->next=$otnode;
+                    }
+                    $otnode->next=$rt;
+                    $rt->prev=$otnode;
+                    $this->cn++;
+                    if($rt===$this->R){$this->R=$otnode;}//下に追加したら、$this->Rの更新が必要。
+                }else{
+                    $otck0=true;
+                }
+                //echo"devide upper\n";
+                if($rt->upper!==$tn){
+                    $otnode=new node_b($rt->value,$tn+1,$rt->upper);
+                    $rt->upper=$tn;
+                    if($rt->next!==null){
+                        $otnode->next=$rt->next;
+                        $rt->next->prev=$otnode;
+                    }
+                    $otnode->prev=$rt;
+                    $rt->next=$otnode;
+                    $this->cn++;
+                }else{
+                    $otck1=true;
+                }
+
+                $rt->value=$value;//join前にvalueを更新するのが必須
+
+                if($otck1){$this->join($rt);}//下方向joinすると$rtが消えてしまうので、上方向joinを先に実行
+                if($rt->prev!==null and $otck0){$this->join($rt->prev);}
+            }
+            return true;
+        }
+        public function getList(){
+            $d2_rt=array();
+            $node=$this->R;
+            for($i1=0;$i1<$this->cn;$i1++){
+                $d2_rt[]=array($node->lower,$node->upper,$node->value);
+                $node=$node->next;
+            }
+            return $d2_rt;
+        }
+        public function printList(){
+            echo "cn=".$this->cn."\n";
+            $node=$this->R;
+            for($i1=0;$i1<$this->cn;$i1++){
+                echo $node->lower." ".$node->upper." ".$node->value."\n";
+                $node=$node->next;
+            }
+            echo "\n";
+        }
+    }
+
+}
+namespace{
+    // //メモaで実験。isNeedを置くのと書き下すのとで、どの程度速度差が出るか。
+    // //百万回の書き込みで0.1秒に届かないなら、完全無視でいいと思う。
+    // $ln_k=1000;
+    // $ln_v=1000;
+    // $ln_l=1000000;
+    // $rule=1;
+    // timecheck();
+    // $test=new \crast\memo\a0($rule);
+    // for($i1=0;$i1<$ln_l;$i1++){$test->write(rand(1,$ln_k),rand(1,$ln_v));}
+    // timeCheck();
+    // $test=new \crast\memo\a_h($rule);
+    // for($i1=0;$i1<$ln_l;$i1++){$test->write(rand(1,$ln_k),rand(1,$ln_v));}
+    // timeCheck();
+    // $test=new \crast\memo\a_h($rule);
+    // for($i1=0;$i1<$ln_l;$i1++){$test->write(rand(1,$ln_k),rand(1,$ln_v));}
+    // timeCheck();
+    // $test=new \crast\memo\a0($rule);
+    // for($i1=0;$i1<$ln_l;$i1++){$test->write(rand(1,$ln_k),rand(1,$ln_v));}
+    // timeCheck();
+    // // // $ln_k=1000;
+    // // $ln_v=1000;
+    // // $ln_l=1000000;
+    // // $rule=1;
+    // //結果は、
+    // // time_0.399
+    // // time_0.355
+    // // time_0.354
+    // // time_0.399
+    // //という感じで、1割以上は速度変わるとはいえ、百万回で0.05秒に満たないなら、そこまで徹底的に潰す必要は無いかな。
+    // //ちょっと面白いことに、$rule=-2だと、
+    // // time_0.408
+    // // time_0.373
+    // // time_0.369
+    // // time_0.408
+    // //と、差が縮まる。なんでだろうなこれ。
+    // //しかし、これだと、ほんとに最小限だけにすれば目に見えて早くなるのでは。
+    // //いやまあ、ほんとに最小限にするなら、クラスとか作らずに直接書けって話しよな、この程度なら。
+    //aをa0にして再テスト。メモ複数種作るんなら、compare複数用意する必要ないよな。
+    // time_0.26<br>
+    // time_0.356<br>
+    // time_0.357<br>
+    // time_0.259<br>
+    //わー圧倒的に速い。無駄を省くのは大事やなー。
+    //とはいえ、クラスとして作るからには、compareをオーバーライドしていろいろ使えるようにするのは大事。
+    //配列の特定のキーに入れた値で更新とか、オブジェクトの特定のプロパティで更新とか、使い方はいろいろある。
+    //それら全部に専用クラスを作った方が速いんだろうけど、それならライブラリじゃなくて内部コード書くわって話だし。
+    //とりあえず、rule毎に別クラス作る方向では行ってみよう。
+    //a0とa_hで速度比較。
+    // time_0.268
+    // time_0.222
+    // time_0.222
+    // time_0.259
+    //大差ではないけど、早くはなってる。
+    //大差ではないので、rule別に作るのは必須ではないのかもしれない。
+
+    
+}
+namespace{
+    //bがちゃんと動いているかの確認。
+    $test=new \crast\memo\b(1);
+    // $test->write(0,1);
+    // $test->write(1,2);
+    // $test->write(2,1);
+    // $test->write(3,1);
+    // $test->write(4,1);
+    // $test->write(5,1);
+    // $test->write(3,2);
+    // $test->write(2,2);
+    // $test->printList();
+    //devide後のjoinとvalue更新の順番を正しくするまでだいぶかかったけど、まあ何とかなったからよし。
+    //あー、$this->Rの更新忘れてたかー。上にばかり追加してるとチェックできんな確かに。
+
+    //速度チェックというか、作っては見たものの、範囲型のメモの方が速い場合ってあるの？という話。
+    srand(0);
+    $ln_k=10000;
+    $ln_v=2;
+    $ln_l=1000000;
+    $rule=1;
+    timecheck();
+    $test=new \crast\memo\b($rule);
+    for($i1=0;$i1<$ln_l;$i1++){$test->write(rand(1,$ln_k),rand(1,$ln_v));}
+    timeCheck();
+    memorycheck(true);
+    memorycheck();
+    $test=new \crast\memo\a_h();
+    for($i1=0;$i1<$ln_l;$i1++){$test->write(rand(1,$ln_k),rand(1,$ln_v));}
+    timeCheck();
+    memorycheck(true);
+    memorycheck();
+    $test=new \crast\memo\a_h();
+    for($i1=0;$i1<$ln_l;$i1++){$test->write(rand(1,$ln_k),rand(1,$ln_v));}
+    timeCheck();
+    $test=new \crast\memo\b($rule);
+    for($i1=0;$i1<$ln_l;$i1++){$test->write(rand(1,$ln_k),rand(1,$ln_v));}
+    timeCheck();
+    //1or2を、一万個管理するみたいな状況でダメなら、もう使う意味ないんじゃないかな。
+    // _time__4.115<br>
+    // memory_0.497<br>
+    // memory_1.036<br>
+    // _time__0.231<br>
+    // memory_1.122<br>
+    // memory_1.435<br>
+    // _time__0.232<br>
+    // _time__4.212<br>
+    //はい、遅すぎて話にならない。解散。
+    //メモリ使用量若干減ってはいるけど、ピークの差がこの程度では使う理由にならんね。
+    //やっぱ配列基本操作は早いんやなというか、よほどアルゴリズムで高速化しない限りオブジェクト構造はループ内で使いたくないというか。
+    //それでも有用なヒープは、結構凄いデータ構造なのでは。
+
+}
