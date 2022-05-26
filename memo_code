@@ -1,27 +1,30 @@
 <?php
 namespace crast;
-
-class memo{
-    protected $dn_t;
+class memo{//複数の組み合わせごとにメモする場合。次数不定のツリー型メモ
+    protected $dn_tree;
     //protected $name;//次数不定メモの場合、捜査対象は専用の名前のキーに入れる
     //位置配列引数の末尾を固定するのと同じなので、不要と言えば不要
-    public function __construct(protected $name=null){}
-    protected function compare($tn1,$tn2):int{//rule=2で使用する比較メソッド
+    public function __construct(protected $rule=0,protected $name=null){
+        $this->dn_tree=array();
+    }
+    protected function compare($tn1,$tn2):int{//rule=2で使用する内容比較メソッド、オーバーライド用
         if(is_array($tn1)){
             $tn1=count($tn1);
             $tn2=count($tn2);
         }
-        if($tn1==$tn2){return 0;}
+        if($tn1>$tn2){return 1;}
         elseif($tn1<$tn2){return -1;}
-        else{return 1;}
+        else{return 0;}
     }
-    public function getValue(array $d1_t):mixed{//メモに存在すれば内容を、無ければfalseを返す
+
+    public function read(array $d1_t):mixed{//メモに存在すれば内容を、無ければfalseを返す
+        $otar=$this->dn_tree;
         $cn=count($d1_t);
-        $otar=$this->dn_t;
-        foreach($d1_t as $key=>$fen){
-            if(!isset($otar[$fen])){return false;}
-            $otar=$otar[$fen];
+        for($i1=0;$i1<$cn;$i1++){
+            if(!array_key_exists($d1_t[$i1],$otar)){return false;}
+            $otar=$otar[$d1_t[$i1]];
         }
+
         if($this->name===null){
             return $otar; 
         }else{
@@ -31,19 +34,21 @@ class memo{
     //メモに書き込む。条件0で新規なら、-1でより小さければ、1でより大きければ
     //-2でcompareで-1なら、2でcompareで1なら
     //変更有りならtrue、変更無しならfalseを返す
-    public function setValue(array $d1_t,$value,int $rule=0):bool{
-        $otar=&$this->dn_t;
+    public function write(array $d1_t,$value,?int $rule=null):bool{
+        if($rule===null){$rule=$this->rule;}
+        $otar=&$this->dn_tree;
         $otck=false;//新規の値か否か
-        foreach($d1_t as $key=>$fen){
-            if(!isset($otar[$fen])){
-                $otar[$fen]=array();
+        $cn=count($d1_t);
+        for($i1=0;$i1<$cn;$i1++){
+            if(!array_key_exists($d1_t[$i1],$otar)){
+                $otar[$d1_t[$i1]]=array();
                 $otck=true;
             }
-            $otar=&$otar[$fen];
+            $otar=&$otar[$d1_t[$i1]];
         }
-
         if($this->name!==null){
-            $otar=&$otar[$this->name];
+            $otar=&$otar[$this->name];//リファレンス代入だと、存在しないキーに代入してもエラー出ないんだね……。
+            $otck=true;
         }
 
         //ruleに基づいて、書き込むかfalseを返す
@@ -96,6 +101,6 @@ class memo{
         }
         unset($otar);//リファレンスは使い終わった時点でunsetしておかないと不安。
         
-        return true;      
+        return true;
     }
 }
