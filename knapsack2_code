@@ -1,0 +1,180 @@
+<?php
+namespace crast;
+include("c_sort.txt");
+/**
+ * ナップサック問題に解答する。個数条件可能、逆条件可能。
+ * 
+ * __construct()で条件設定、push()で要素をひとつずつ入力、solve()で解答を得る。
+ * 
+ * @see \crast\c_sort() 配列の配列をソートする処理
+ * 
+ */
+class knapsack{
+	/** @var int 個数条件値の最大値*/
+	protected $tln;
+	/** @var int 個数条件値の最小値*/
+	protected $bln;
+	/** @var array 探索する対象のリスト*/
+	protected $d2_b;
+	/** @var int|float 暫定限界値*/
+	protected $z_rt;
+	/** @var array 制限条件値の位置ごと条件リスト*/
+	protected $d1_kl;
+	/** @var array 測定条件値の位置ごと条件リスト*/
+	protected $d1_vl;
+	/**
+	 * コンストラクタで条件を設定する
+	 * 
+	 * @param int|float $ln 制限条件境界値、合計がこの値を超えるかどうかが基本の条件になる
+	 * @param bool $reverse falseなら制限条件境界値以下での測定条件値の最大値、trueなら制限条件境界値以上での測定条件値の最小値を求める
+	 * @param int[]|null[] $MIN_MAX 個数条件の最小値と最大値の配列
+	 */
+	public function __construct(protected int|float $ln, protected bool $reverse=false, array $MIN_MAX=array(null,null)){
+		$this->d2_b=array();
+		$this->bln=$MIN_MAX[0];
+		$this->tln=$MIN_MAX[1];
+	}
+	/**
+	 * 探索対象を入力する
+	 * 
+	 * @param int|float $key 制限条件値、これの合計が境界値を超えるかどうかが基本の条件となる
+	 * @param int|float $value 測定条件値、これの合計の最大値or最小値を求めるのが目的
+	 */
+	public function push($key,$value):void{
+		$this->d2_b[]=array($key,$value,$value/$key);
+	}
+	/**
+	 * ナップサック問題に対し、答えを算出する。
+	 * 
+	 */
+	public function solve():int|float{
+		$this->d1_kl=array();
+		$this->d1_vl=array();//チェックリストの初期化
+		$cn_b=count($this->d2_b);
+
+		$this->d2_b=\crast\c_sort($this->d2_b,2,$this->reverse);
+		$this->d1_kl[0]=$this->d2_b[0][0];
+		$this->d1_vl[0]=$this->d2_b[0][1];
+		if($this->reverse){
+			for($i1=1;$i1<$cn_b;$i1++){//reverse=trueであれば、範囲内のコスト合計と最低測定値を並べる
+				$this->d1_kl[$i1]=$this->d1_kl[$i1-1]+$this->d2_b[$i1][0];
+				$this->d1_vl[$i1]=min($this->d1_vl[$i1-1],$this->d2_b[$i1][1]);
+			}
+		}else{
+			for($i1=1;$i1<$cn_b;$i1++){//reverse=falseであれば、範囲内の最低コストと測定値合計を並べる
+				$this->d1_kl[$i1]=min($this->d1_kl[$i1-1],$this->d2_b[$i1][0]);
+				$this->d1_vl[$i1]=$this->d1_vl[$i1-1]+$this->d2_b[$i1][1];
+			}
+		}
+
+		$this->rc(0,0,0,count($this->d2_b)-1);
+		return $this->z_rt;
+	}
+	/** 個数上限を超えていたらtrue*/
+	protected function isOver(int $c):bool{
+		return $this->tln!==null and $this->tln<$c;
+	}
+	/** 個数下限を割っていたらtrue*/
+	protected function isUnder(int $c):bool{
+		return $this->bln!==null and $this->bln>$c;
+	}
+	/** 制限条件値合計が境界条件を満たすならtrue*/
+	protected function isSafe(int|float $cn_k):bool{
+		if($this->reverse){
+			return $cn_k>=$this->ln;
+		}else{
+			return $cn_k<=$this->ln;
+		}
+	}
+	/** sourceの方がより良ければtrue*/
+	protected function isBetter(int|float $source, int|float $target):bool{
+		if($target===false){
+			return true;
+		}elseif($source===false){
+			return false;
+		}else{
+			if($this->reverse){
+				return $source<$target;
+			}else{
+				return $source>$target;
+			}
+		}
+	}
+	/**
+	 * 再帰関数部分の打ち切り条件詰め合わせセット
+	 * 
+	 * 打ち切らないならtrue、これ以上増えないなら0、増やしても無駄ならfalse
+	 * 
+	 * @param int $c 現在個数
+	 * @param int|float $cn_k 制限条件値合計の現在値
+	 * @param int|float $cn_c 測定条件値合計の現在値
+	 * @param int $tn ここでチェックする対象のインデックス
+	 * 
+	 * @return int|bool 打ち切らないならtrue、これ以上増えないなら0、増やしても無駄ならfalse
+	 */
+	protected function isNeed($c,$cn_k,$cn_c,$tn):int|bool{//打ち切り条件を並べる。hitしたら返り値を、何もhitしなければtrueを返す
+		if($this->isUnder($c+$tn+1)){return false;}//残り個数が最低個数に満たない
+		if($this->isOver($c+1)){return 0;}//これが個数上限なら、この先測定条件値が増加することは無い。
+		if($tn<0){return 0;}//個数が足りているが、要素を使い切っている場合
+
+		if($this->reverse){
+			if(!$this->isUnder($c)){return 0;}//reverse=trueで、個数条件を満たしているなら、これ以上追加しないのが最善
+			if($this->d1_kl[$tn]<$this->ln-$cn_k){return false;}//reverse=trueで、残り範囲の合計コストが残り必要コストを下回る=達成不能である場合
+			if($this->d1_vl[$tn]>=$this->z_rt-$cn_c){return false;}//reverse=trueで、残り範囲の最低測定値が暫定最大値以上なら、無駄。
+		}else{
+			if($this->d1_kl[$tn]>$this->ln-$cn_k){//reverse=falseで、残り範囲の最小コストが残りコストを上回る=追加不能である場合
+				if($this->isUnder($c)){return false;}
+				else{return 0;}
+			}
+			if($this->d1_vl[$tn]<=$this->z_rt-$cn_c){return false;}//reverse=falseで、残り範囲の測定値合計が暫定最大値以下なら、無駄。
+		}
+
+		if($this->isBetter($this->z_rt-$cn_c,($this->ln-$cn_k)*$this->d2_b[$tn][2])){return false;}//残り制限条件値全てがtnの比率でも暫定限界値に劣るなら、考えなくていい
+
+		return true;
+	}
+	/**
+	 * 再帰関数部分
+	 * 
+	 * @param int $c 現在個数
+	 * @param int|float $cn_k 制限条件値合計の現在値
+	 * @param int|float $cn_c 測定条件値合計の現在値
+	 * @param int $tn ここでチェックする対象のインデックス
+	 * @return int|float|false 測定条件値合計のこの先の増加分の限界値、ただし、条件を満たせないならfalse
+	 */
+	protected function rc($c,$cn_k,$cn_c,$tn){
+		$ot=$this->isNeed($c,$cn_k,$cn_c,$tn);
+		if($ot===true){
+		}elseif($ot===false){
+			return $ot;
+		}else{
+			if($this->isBetter($ot+$cn_c,$this->z_rt)){
+				$this->z_rt=$ot+$cn_c;
+			}
+			return $ot;
+		}
+
+		//$tnを使う場合を考慮する条件
+		if(!$this->isover($c+1) and $this->isSafe($cn_k+$this->d2_b[$tn][0])){
+			$rtn2=$this->rc($c+1,$cn_k+$this->d2_b[$tn][0],$cn_c+$this->d2_b[$tn][1],$tn-1);
+			if($rtn2!==null and $rtn2!==false){$rtn2+=$this->d2_b[$tn][1];}
+		}else{
+			$rtn2=false;
+		}
+		$rtn1=$this->rc($c,$cn_k,$cn_c,$tn-1);//$tnを使わない場合の分岐
+
+		if($this->isBetter($rtn1,$rtn2)){
+			$rtn=$rtn1;
+		}else{
+			$rtn=$rtn2;
+		}
+
+		if($rtn===false){return false;}//falseで足し算しないように
+
+		if($this->isBetter($rtn+$cn_c,$this->z_rt)){
+			$this->z_rt=$rtn+$cn_c;//暫定限界値の更新
+		}
+
+		return $rtn;
+	}
+}
