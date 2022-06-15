@@ -1,0 +1,2133 @@
+<?PHP
+namespace{
+	//新しいコードを試してみる場所。
+	include("c_sort.txt");
+	include("memo.txt");
+	
+	set_time_limit(0);
+	function timeCheck(){
+		static $beforeCheckTime;
+		$newCheckTime=substr(str_pad(hrtime()[0],9,"0",STR_PAD_LEFT).".".str_pad(hrtime()[1],9,"0",STR_PAD_LEFT),4,9);
+		if(isset($beforeCheckTime)){$echo=round($newCheckTime-$beforeCheckTime,3);echo "time_$echo<br>\n";}
+		$beforeCheckTime=$newCheckTime;
+	}
+    function memoryCheck($now=false){
+        if($now){
+            $ot=strval(memory_get_usage());
+        }else{
+            $ot=strval(memory_get_peak_usage());
+        }
+        $echo=round($ot/(1024*1024),3);
+        echo "memory_$echo<br>\n";
+    }
+	timecheck();
+	//../..../..../..../..../..../..../..../..../..
+
+	//拡張ナップザック問題とでも呼ぶべきものに遭遇したので、一般化してみる。
+	//個数条件付き、逆条件有り。
+	//各要素は、制限条件値と測定条件値を持つ。
+	//制限条件値の合計が制限条件境界値以上or以下かつ、
+	//要素個数が個数条件範囲内での、
+	//測定条件値の最大値or最小値を求める。
+	//要素は、重複はあってもリストで与えられるものとする。(個数制ではない)
+}
+namespace crast{//比較用の、通常のナップサック問題用
+    class knapsack{//ナップサック問題を解く
+        protected $d2_b;//コスト、価値の配列
+        protected $cn_b;//$d2_bの要素数
+        protected $d2_m;//有効最大リスト番号→残りコスト→範囲最大値のメモ配列
+        protected $maxCost;//最大コスト条件
+        protected $z_max;//暫定最大値
+        protected $sumCost;//コスト合計
+        protected $sumValue;//価値合計
+
+        public function __construct($d2_b,$maxCost){
+            $this->sumCost=0;
+            $this->sumValue=0;
+            foreach($d2_b as $d1_fe){
+                $d1_fe[2]=$d1_fe[1]/$d1_fe[0];
+                $this->sumCost+=$d1_fe[0];
+                $this->sumValue+=$d1_fe[1];
+                $this->insert($d1_fe);
+                $this->cn_b++;
+            }
+            $this->maxCost=$maxCost;
+        }
+        protected function insert($d1_t){
+            if($this->cn_b==0){$this->d2_b=array($d1_t);return;}//今回が一つ目の場合
+            $tu=$this->cn_b-1;$td=0;
+            if($this->d2_b[$this->cn_b-1][2]<=$d1_t[2]){$this->d2_b[]=$d1_t;}//最後尾に追加パターン
+            elseif($this->d2_b[0][2]>$d1_t[2]){array_unshift($this->d2_b,0);$this->d2_b[0]=$d1_t;}//先頭に追加パターン
+            else{//二分探索で追加位置を探す
+                while(true){
+                    if($tu-$td==1){array_splice($this->d2_b,$tu,0,0);$this->d2_b[$tu]=$d1_t;break;}
+                    else{
+                        $nt=floor(($tu+$td)/2);
+                        if($this->d2_b[$nt][2]<=$d1_t[2]){$td=$nt;}
+                        else{$tu=$nt;}
+                    }//下以上で上より小さい、の範囲で狭めていく
+                }
+            }
+        }   
+        public function getReturn(){
+            $this->d2_m=array_fill(0,count($this->d2_b),array());
+            $this->z_max=0;
+            $rc=$this->sumCost;
+            $rv=$this->sumValue;
+            $lastCost=$this->maxCost;
+            for($i1=$this->cn_b-1;$i1>=0;$i1--){//暫定最大値を貪欲法で作成
+                if($this->d2_b[$i1][0]>$lastCost){break;}
+                $this->z_max+=$this->d2_b[$i1][1];
+                $lastCost-=$this->d2_b[$i1][0];
+                $rc-=$this->d2_b[$i1][0];
+                $rv-=$this->d2_b[$i1][1];
+            }
+            $lastKey=max($i1,0);//ワンチャン、全部採用できた場合、$i1=-1でループを終了することがあり得る。
+            $vn=$this->z_max;
+            for($i1=$lastKey;;$i1++){//暫定最大値を作ったところから、要素を一つずつ増やしながらそれぞれ再帰していく。
+                $this->z_max=$vn+$this->do_rp($i1,$lastCost,$vn,$rc,$rv);//最大有効リスト番号、残りコスト、現在価値、有効リスト合計コスト、有効リスト合計価値
+                if($i1==$this->cn_b-1){break;}
+                $lastCost+=$this->d2_b[$i1+1][0];
+                $vn-=$this->d2_b[$i1+1][1];
+                $rc+=$this->d2_b[$i1+1][0];
+                $rv+=$this->d2_b[$i1+1][1];
+            }
+            return $this->z_max;//最終的に、更新された暫定最大値を解答とする。
+        }
+        protected function do_rp($ln,$cn,$vn,$rc,$rv){//最大有効リスト番号、残りコスト、現在価値、有効リスト合計コスト、有効リスト合計価値
+            if(array_key_exists($cn,$this->d2_m[$ln])){return $this->d2_m[$ln][$cn];}
+            if($cn<=0){$this->d2_m[$ln][$cn]=0;return 0;}
+            if(($this->z_max-$vn)/$cn>$this->d2_b[$ln][2]){return 0;}
+            if(($this->z_max-$vn)>$rv){return 0;}
+            if($cn>=$rc){$this->d2_m[$ln][$cn]=$rv;return $rv;}
+            if($ln==0){$this->d2_m[$ln][$cn]=0;return 0;}
+
+            $rc-=$this->d2_b[$ln][0];
+            $rv-=$this->d2_b[$ln][1];
+            $rtn=$this->do_rp($ln-1,$cn,$vn,$rc,$rv);
+            if($this->d2_b[$ln][0]<=$cn){
+                $rtn2=$this->do_rp($ln-1,$cn-$this->d2_b[$ln][0],$vn+$this->d2_b[$ln][1],$rc,$rv);
+                $rtn=max($rtn,$rtn2+$this->d2_b[$ln][1]);
+            }
+            $this->d2_m[$ln][$cn]=$rtn;
+            if($this->z_max<$vn+$rtn){$this->z_max=$vn+$rtn;}
+            return $rtn;
+        }
+    }
+    function knapsack($d2_b,$maxCost){
+        $obj=new knapsack($d2_b,$maxCost);
+        return $obj->getReturn();
+    }
+}
+namespace crast\knapsack\simple0{
+	//正しい処理か確認するための、馬鹿正直型。
+	//何の探索打ち切り条件も無い。
+	class test{
+		//public $kp=0;//制限条件値の位置
+		//public $cp=1;//測定条件値の位置
+		//public $rule;//0なら制限条件境界値以下での測定条件値の最大値、1なら制限条件境界値以上での測定条件値の最小値を求める
+		public $tln;//個数条件値の最大値
+		public $bln;//個数条件値の最小値
+		//public $ln;//制限条件境界値
+		public $d2_b;//要素一覧
+		public function __construct(public $ln,public $rule=0,$d1_t=array(null,null)){
+			$this->d2_b=array();
+			$this->bln=$d1_t[0];
+			$this->tln=$d1_t[1];
+		}
+		//$this->d2_bは適当に代入するものとする。
+		public function getReturn(){
+			return $this->rc(0,0,0,0);
+		}
+		protected function isOver(int $c):bool{//個数上限を超えていたらtrue
+			return $this->tln!==null and $this->tln<$c;
+		}
+		protected function isUnder(int $c):bool{//個数下限を割っていたらtrue
+			return $this->bln!==null and $this->bln>$c;
+		}
+		protected function isSafe($cn_k):bool{//制限条件値合計がruleを満たすならtrue
+			if($this->rule===0){
+				return $cn_k<=$this->ln;
+			}else{
+				return $cn_k>=$this->ln;
+			}
+		}
+		protected function isBetter($rtn1,$rtn2){//rtn1の方がより良ければtrue
+			if($rtn2===null){
+				return true;
+			}elseif($rtn1===null){
+				return false;
+			}else{
+				if($this->rule===0){
+					return $rtn1>$rtn2;
+				}else{
+					return $rtn1<$rtn2;
+				}
+			}
+		}
+		//再帰に必要な数値は、現在個数と現在制限条件値合計・現在測定条件値合計値、次にチェックする対象。
+		//出力値は、ruleに基づく測定条件値合計値$cn_cのこの先の増加分の最大値or最小値
+		//ただし、個数条件を満たしていない場合は返り値はnull
+		protected function rc($c,$cn_k,$cn_c,$tn){
+			if(!array_key_exists($tn,$this->d2_b)){//要素を使い切っている場合
+				if($this->isUnder($c)){
+					return null;
+				}else{
+					return 0;
+				}
+			}
+			$rtn1=$this->rc($c,$cn_k,$cn_c,$tn+1);//$tnを使わない場合の分岐
+			//$tnを使う場合を考慮する条件
+			if(!$this->isover($c+1) and $this->isSafe($cn_k+$this->d2_b[$tn][0])){
+				$rtn2=$this->rc($c+1,$cn_k+$this->d2_b[$tn][0],$cn_c+$this->d2_b[$tn][1],$tn+1);
+				if($rtn2!==null){$rtn2+=$this->d2_b[$tn][1];}
+			}else{
+				$rtn2=null;
+			}
+
+			if($this->isBetter($rtn1,$rtn2)){
+				return $rtn1;
+			}else{
+				return $rtn2;
+			}
+		}
+	}
+	class test01{//まずは、順番にソート
+		//public $kp=0;//制限条件値の位置
+		//public $cp=1;//測定条件値の位置
+		//public $rule;//0なら制限条件境界値以下での測定条件値の最大値、1なら制限条件境界値以上での測定条件値の最小値を求める
+		public $tln;//個数条件値の最大値
+		public $bln;//個数条件値の最小値
+		//public $ln;//制限条件境界値
+		public $d2_b;//要素一覧
+		public function __construct(public $ln,public $rule=0,$d1_t=array(null,null)){
+			$this->d2_b=array();
+			$this->bln=$d1_t[0];
+			$this->tln=$d1_t[1];
+		}
+		public function push($key,$value){
+			$this->d2_b[]=array($key,$value,$value/$key);
+		}
+		public function getReturn(){
+			if($this->rule===0){
+				$this->d2_b=\crast\c_sort($this->d2_b,2,0);
+			}else{
+				$this->d2_b=\crast\c_sort($this->d2_b,2,1);
+			}
+			return $this->rc(0,0,0,0);
+		}
+		protected function isOver(int $c):bool{//個数上限を超えていたらtrue
+			return $this->tln!==null and $this->tln<$c;
+		}
+		protected function isUnder(int $c):bool{//個数下限を割っていたらtrue
+			return $this->bln!==null and $this->bln>$c;
+		}
+		protected function isSafe($cn_k):bool{//制限条件値合計がruleを満たすならtrue
+			if($this->rule==0){
+				return $cn_k<=$this->ln;
+			}else{
+				return $cn_k>=$this->ln;
+			}
+		}
+		protected function isBetter($rtn1,$rtn2){//rtn1の方がより良ければtrue
+			if($rtn2===null){
+				return true;
+			}elseif($rtn1===null){
+				return false;
+			}else{
+				if($this->rule===0){
+					return $rtn1>$rtn2;
+				}else{
+					return $rtn1<$rtn2;
+				}
+			}
+		}
+		//再帰に必要な数値は、現在個数と現在制限条件値合計・現在測定条件値合計値、次にチェックする対象。
+		//出力値は、ruleに基づく測定条件値合計値$cn_cのこの先の増加分の最大値or最小値
+		//ただし、個数条件を満たしていない場合は返り値はnull
+		protected function rc($c,$cn_k,$cn_c,$tn){
+			if(!array_key_exists($tn,$this->d2_b)){//要素を使い切っている場合
+				if($this->isUnder($c)){
+					return null;
+				}else{
+					return 0;
+				}
+			}
+			$rtn1=$this->rc($c,$cn_k,$cn_c,$tn+1);//$tnを使わない場合の分岐
+			//$tnを使う場合を考慮する条件
+			if(!$this->isover($c+1) and $this->isSafe($cn_k+$this->d2_b[$tn][0])){
+				$rtn2=$this->rc($c+1,$cn_k+$this->d2_b[$tn][0],$cn_c+$this->d2_b[$tn][1],$tn+1);
+				if($rtn2!==null){$rtn2+=$this->d2_b[$tn][1];}
+			}else{
+				$rtn2=null;
+			}
+
+			if($this->isBetter($rtn1,$rtn2)){
+				return $rtn1;
+			}else{
+				return $rtn2;
+			}
+		}
+	}
+	class test02{//打ち切り条件の別メソッド化
+		//public $kp=0;//制限条件値の位置
+		//public $cp=1;//測定条件値の位置
+		//public $rule;//0なら制限条件境界値以下での測定条件値の最大値、1なら制限条件境界値以上での測定条件値の最小値を求める
+		public $tln;//個数条件値の最大値
+		public $bln;//個数条件値の最小値
+		//public $ln;//制限条件境界値
+		public $d2_b;//要素一覧
+		public function __construct(public $ln,public $rule=0,$d1_t=array(null,null)){
+			$this->d2_b=array();
+			$this->bln=$d1_t[0];
+			$this->tln=$d1_t[1];
+		}
+		public function push($key,$value){
+			$this->d2_b[]=array($key,$value,$value/$key);
+		}
+		public function getReturn(){
+			if($this->rule===0){
+				$this->d2_b=\crast\c_sort($this->d2_b,2,0);
+			}else{
+				$this->d2_b=\crast\c_sort($this->d2_b,2,1);
+			}
+			return $this->rc(0,0,0,0);
+		}
+		protected function isOver(int $c):bool{//個数上限を超えていたらtrue
+			return $this->tln!==null and $this->tln<$c;
+		}
+		protected function isUnder(int $c):bool{//個数下限を割っていたらtrue
+			return $this->bln!==null and $this->bln>$c;
+		}
+		protected function isSafe($cn_k):bool{//制限条件値合計がruleを満たすならtrue
+			if($this->rule==0){
+				return $cn_k<=$this->ln;
+			}else{
+				return $cn_k>=$this->ln;
+			}
+		}
+		protected function isBetter($rtn1,$rtn2){//rtn1の方がより良ければtrue
+			if($rtn2===null){
+				return true;
+			}elseif($rtn1===null){
+				return false;
+			}else{
+				if($this->rule===0){
+					return $rtn1>$rtn2;
+				}else{
+					return $rtn1<$rtn2;
+				}
+			}
+		}
+		protected function isNotCheck($c,$cn_k,$cn_c,$tn):mixed{//打ち切り条件を並べる。hitしたら返り値を、何もhitしなければtrueを返す
+			if(!array_key_exists($tn,$this->d2_b)){//要素を使い切っている場合
+				if($this->isUnder($c)){
+					return null;
+				}else{
+					return 0;
+				}
+			}
+			return true;
+		}
+		//再帰に必要な数値は、現在個数と現在制限条件値合計・現在測定条件値合計値、次にチェックする対象。
+		//出力値は、ruleに基づく測定条件値合計値$cn_cのこの先の増加分の最大値or最小値
+		//ただし、個数条件を満たしていない場合は返り値はnull
+		protected function rc($c,$cn_k,$cn_c,$tn){
+			$ot=$this->isNotCheck($c,$cn_k,$cn_c,$tn);
+			if($ot!==true){return $ot;}
+
+			$rtn1=$this->rc($c,$cn_k,$cn_c,$tn+1);//$tnを使わない場合の分岐
+			//$tnを使う場合を考慮する条件
+			if(!$this->isover($c+1) and $this->isSafe($cn_k+$this->d2_b[$tn][0])){
+				$rtn2=$this->rc($c+1,$cn_k+$this->d2_b[$tn][0],$cn_c+$this->d2_b[$tn][1],$tn+1);
+				if($rtn2!==null){$rtn2+=$this->d2_b[$tn][1];}
+			}else{
+				$rtn2=null;
+			}
+
+			if($this->isBetter($rtn1,$rtn2)){
+				return $rtn1;
+			}else{
+				return $rtn2;
+			}
+		}
+	}
+	class test03{//再帰から出力する前に、メモに入れる
+		//public $kp=0;//制限条件値の位置
+		//public $cp=1;//測定条件値の位置
+		//public $rule;//0なら制限条件境界値以下での測定条件値の最大値、1なら制限条件境界値以上での測定条件値の最小値を求める
+		public $tln;//個数条件値の最大値
+		public $bln;//個数条件値の最小値
+		//public $ln;//制限条件境界値
+		public $d2_b;//要素一覧
+		protected $memo;//メモ
+		public function __construct(public $ln,public $rule=0,$d1_t=array(null,null)){
+			$this->d2_b=array();
+			$this->bln=$d1_t[0];
+			$this->tln=$d1_t[1];
+			if($this->rule===0){
+				$this->memo=new \crast\memo(1);
+			}elseif($this->rule===1){
+				$this->memo=new \crast\memo(-1);
+			}
+		}
+		public function push($key,$value){
+			$this->d2_b[]=array($key,$value,$value/$key);
+		}
+		public function getReturn(){
+			if($this->rule===0){
+				$this->d2_b=\crast\c_sort($this->d2_b,2,0);
+			}else{
+				$this->d2_b=\crast\c_sort($this->d2_b,2,1);
+			}
+			return $this->rc(0,0,0,0);
+		}
+		protected function isOver(int $c):bool{//個数上限を超えていたらtrue
+			return $this->tln!==null and $this->tln<$c;
+		}
+		protected function isUnder(int $c):bool{//個数下限を割っていたらtrue
+			return $this->bln!==null and $this->bln>$c;
+		}
+		protected function isSafe($cn_k):bool{//制限条件値合計がruleを満たすならtrue
+			if($this->rule==0){
+				return $cn_k<=$this->ln;
+			}else{
+				return $cn_k>=$this->ln;
+			}
+		}
+		protected function isBetter($rtn1,$rtn2){//rtn1の方がより良ければtrue
+			if($rtn2===null){
+				return true;
+			}elseif($rtn1===null){
+				return false;
+			}else{
+				if($this->rule===0){
+					return $rtn1>$rtn2;
+				}else{
+					return $rtn1<$rtn2;
+				}
+			}
+		}
+		protected function isNotCheck($c,$cn_k,$cn_c,$tn):mixed{//打ち切り条件を並べる。hitしたら返り値を、何もhitしなければtrueを返す
+			if(!array_key_exists($tn,$this->d2_b)){//要素を使い切っている場合
+				if($this->isUnder($c)){
+					return null;
+				}else{
+					return 0;
+				}
+			}
+			return true;
+		}
+		//再帰に必要な数値は、現在個数と現在制限条件値合計・現在測定条件値合計値、次にチェックする対象。
+		//出力値は、ruleに基づく測定条件値合計値$cn_cのこの先の増加分の最大値or最小値
+		//ただし、個数条件を満たしていない場合は返り値はnull
+		protected function rc($c,$cn_k,$cn_c,$tn){
+			$ot=$this->isNotCheck($c,$cn_k,$cn_c,$tn);
+			if($ot!==true){return $ot;}
+
+			$rtn1=$this->rc($c,$cn_k,$cn_c,$tn+1);//$tnを使わない場合の分岐
+			//$tnを使う場合を考慮する条件
+			if(!$this->isover($c+1) and $this->isSafe($cn_k+$this->d2_b[$tn][0])){
+				$rtn2=$this->rc($c+1,$cn_k+$this->d2_b[$tn][0],$cn_c+$this->d2_b[$tn][1],$tn+1);
+				if($rtn2!==null){$rtn2+=$this->d2_b[$tn][1];}
+			}else{
+				$rtn2=null;
+			}
+
+			if($this->isBetter($rtn1,$rtn2)){
+				$this->memo->write(array($c,$cn_k,$tn),$rtn1);
+				return $rtn1;
+			}else{
+				$this->memo->write(array($c,$cn_k,$tn),$rtn2);
+				return $rtn2;
+			}
+		}
+	}
+	class test03_1 extends test03{//メモに上書きなら今回の値を、上書きでないならメモの値を返してみる。
+		protected function rc($c,$cn_k,$cn_c,$tn){
+			$ot=$this->isNotCheck($c,$cn_k,$cn_c,$tn);
+			if($ot!==true){return $ot;}
+
+			$rtn1=$this->rc($c,$cn_k,$cn_c,$tn+1);//$tnを使わない場合の分岐
+			//$tnを使う場合を考慮する条件
+			if(!$this->isover($c+1) and $this->isSafe($cn_k+$this->d2_b[$tn][0])){
+				$rtn2=$this->rc($c+1,$cn_k+$this->d2_b[$tn][0],$cn_c+$this->d2_b[$tn][1],$tn+1);
+				if($rtn2!==null){$rtn2+=$this->d2_b[$tn][1];}
+			}else{
+				$rtn2=null;
+			}
+
+			if($this->isBetter($rtn1,$rtn2)){
+				if($this->memo->write(array($c,$cn_k,$tn),$rtn1)){
+					return $rtn1;
+				}else{
+					return $this->memo->read(array($c,$cn_k,$tn));
+				}
+			}else{
+				if($this->memo->write(array($c,$cn_k,$tn),$rtn2)){
+					return $rtn2;
+				}else{
+					return $this->memo->read(array($c,$cn_k,$tn));
+				}
+			}
+		}
+	}
+	class test03_2 extends test03_1{//打ち切り条件追加→メモに存在する
+		protected function isNotCheck($c,$cn_k,$cn_c,$tn):mixed{//打ち切り条件を並べる。hitしたら返り値を、何もhitしなければtrueを返す
+			if(!array_key_exists($tn,$this->d2_b)){//要素を使い切っている場合
+				if($this->isUnder($c)){
+					return null;
+				}else{
+					return 0;
+				}
+			}
+			$otn=$this->memo->read(array($c,$cn_k,$tn));
+			if($otn!==false){return $otn;}//メモに存在すればそれを返す
+			return true;
+		}
+	}
+	class test03_fail{//次に、メモによる打ち切り→readがfalseを返した際の処理がおかしいっぽい？
+		//public $kp=0;//制限条件値の位置
+		//public $cp=1;//測定条件値の位置
+		//public $rule;//0なら制限条件境界値以下での測定条件値の最大値、1なら制限条件境界値以上での測定条件値の最小値を求める
+		public $tln;//個数条件値の最大値
+		public $bln;//個数条件値の最小値
+		//public $ln;//制限条件境界値
+		public $d2_b;//要素一覧
+		protected $memo;
+		public function __construct(public $ln,public $rule=0,$d1_t=array(null,null)){
+			$this->d2_b=array();
+			$this->bln=$d1_t[0];
+			$this->tln=$d1_t[1];
+			if($this->rule===0){
+				$this->memo=new \crast\memo(1);
+			}elseif($this->rule===1){
+				$this->memo=new \crast\memo(-1);
+			}
+		}
+		public function push($key,$value){
+			$this->d2_b[]=array($key,$value,$value/$key);
+		}
+		public function getReturn(){
+			if($this->rule===0){
+				$this->d2_b=\crast\c_sort($this->d2_b,2,0);
+			}else{
+				$this->d2_b=\crast\c_sort($this->d2_b,2,1);
+			}
+			return $this->rc(0,0,0,0);
+		}
+		protected function isOver(int $c):bool{//個数上限を超えていたらtrue
+			return $this->tln!==null and $this->tln<$c;
+		}
+		protected function isUnder(int $c):bool{//個数下限を割っていたらtrue
+			return $this->bln!==null and $this->bln>$c;
+		}
+		protected function isSafe($cn_k):bool{//制限条件値合計がruleを満たすならtrue
+			if($this->rule==0){
+				return $cn_k<=$this->ln;
+			}else{
+				return $cn_k>=$this->ln;
+			}
+		}
+		protected function isBetter($rtn1,$rtn2){//rtn1の方がより良ければtrue
+			if($rtn2===null){
+				return true;
+			}elseif($rtn1===null){
+				return false;
+			}else{
+				if($this->rule===0){
+					return $rtn1>$rtn2;
+				}else{
+					return $rtn1<$rtn2;
+				}
+			}
+		}
+		protected function isNotCheck($c,$cn_k,$cn_c,$tn):mixed{//打ち切り条件を並べる。hitしたら返り値を、何もhitしなければtrueを返す
+			if(!array_key_exists($tn,$this->d2_b)){//要素を使い切っている場合
+				if($this->isUnder($c)){
+					return null;
+				}else{
+					return 0;
+				}
+			}
+			$otn=$this->memo->read(array($c,$cn_k,$tn));
+			if($otn!==false){return $otn;}//memoにあるなら、その値を返す
+
+			return true;
+		}
+		//再帰に必要な数値は、現在個数と現在制限条件値合計・現在測定条件値合計値、次にチェックする対象。
+		//出力値は、ruleに基づく測定条件値合計値$cn_cのこの先の増加分の最大値or最小値
+		//ただし、個数条件を満たしていない場合は返り値はnull
+		protected function rc($c,$cn_k,$cn_c,$tn){
+
+			$ot=$this->isNotCheck($c,$cn_k,$cn_c,$tn);
+			if($ot!==true){return $ot;}
+
+			$rtn1=$this->rc($c,$cn_k,$cn_c,$tn+1);//$tnを使わない場合の分岐
+			//$tnを使う場合を考慮する条件
+			if(!$this->isover($c+1) and $this->isSafe($cn_k+$this->d2_b[$tn][0])){
+				$rtn2=$this->rc($c+1,$cn_k+$this->d2_b[$tn][0],$cn_c+$this->d2_b[$tn][1],$tn+1);
+				if($rtn2!==null){$rtn2+=$this->d2_b[$tn][1];}
+			}else{
+				$rtn2=null;
+			}
+
+			if($this->isBetter($rtn1,$rtn2)){
+				$rtn=$rtn1;
+			}else{
+				$rtn=$rtn2;
+			}
+			$otn=$this->memo->read(array($c,$cn_k,$tn));
+			if($this->isBetter($rtn,$otn)){
+				$this->memo->write(array($c,$cn_k,$tn),$rtn);
+				return $rtn;
+			}else{
+				return $otn;
+			}
+		}
+	}
+	class test04{//暫定限界値設定、再帰でのチェック順を後ろから順に変更
+		//public $kp=0;//制限条件値の位置
+		//public $cp=1;//測定条件値の位置
+		//public $rule;//0なら制限条件境界値以下での測定条件値の最大値、1なら制限条件境界値以上での測定条件値の最小値を求める
+		public $tln;//個数条件値の最大値
+		public $bln;//個数条件値の最小値
+		//public $ln;//制限条件境界値
+		public $d2_b;//要素一覧
+		protected $memo;//メモ
+		protected $z_rt;//暫定限界値
+		public function __construct(public $ln,public $rule=0,$d1_t=array(null,null)){
+			$this->d2_b=array();
+			$this->bln=$d1_t[0];
+			$this->tln=$d1_t[1];
+			if($this->rule===0){
+				$this->memo=new \crast\memo(1);
+			}elseif($this->rule===1){
+				$this->memo=new \crast\memo(-1);
+			}
+		}
+		public function push($key,$value){
+			$this->d2_b[]=array($key,$value,$value/$key);
+		}
+		public function getReturn(){
+			if($this->rule===0){
+				$this->d2_b=\crast\c_sort($this->d2_b,2,0);
+			}else{
+				$this->d2_b=\crast\c_sort($this->d2_b,2,1);
+			}
+			return $this->rc(0,0,0,count($this->d2_b)-1);
+		}
+		protected function isOver(int $c):bool{//個数上限を超えていたらtrue
+			return $this->tln!==null and $this->tln<$c;
+		}
+		protected function isUnder(int $c):bool{//個数下限を割っていたらtrue
+			return $this->bln!==null and $this->bln>$c;
+		}
+		protected function isSafe($cn_k):bool{//制限条件値合計がruleを満たすならtrue
+			if($this->rule==0){
+				return $cn_k<=$this->ln;
+			}else{
+				return $cn_k>=$this->ln;
+			}
+		}
+		protected function isBetter($rtn1,$rtn2){//rtn1の方がより良ければtrue
+			if($rtn2===null){
+				return true;
+			}elseif($rtn1===null){
+				return false;
+			}else{
+				if($this->rule===0){
+					return $rtn1>$rtn2;
+				}else{
+					return $rtn1<$rtn2;
+				}
+			}
+		}
+		protected function isNotCheck($c,$cn_k,$cn_c,$tn):mixed{//打ち切り条件を並べる。hitしたら返り値を、何もhitしなければtrueを返す
+			if(!array_key_exists($tn,$this->d2_b)){//要素を使い切っている場合
+				if($this->isUnder($c)){
+					return null;
+				}else{
+					return 0;
+				}
+			}
+			$otn=$this->memo->read(array($c,$cn_k,$tn));
+			if($otn!==false){return $otn;}//メモに存在すればそれを返す
+			return true;
+		}
+		//再帰に必要な数値は、現在個数と現在制限条件値合計・現在測定条件値合計値、次にチェックする対象。
+		//出力値は、ruleに基づく測定条件値合計値$cn_cのこの先の増加分の最大値or最小値
+		//ただし、個数条件を満たしていない場合は返り値はnull
+		protected function rc($c,$cn_k,$cn_c,$tn){
+			$ot=$this->isNotCheck($c,$cn_k,$cn_c,$tn);
+			if($ot!==true){return $ot;}
+
+			$rtn1=$this->rc($c,$cn_k,$cn_c,$tn-1);//$tnを使わない場合の分岐
+			//$tnを使う場合を考慮する条件
+			if(!$this->isover($c+1) and $this->isSafe($cn_k+$this->d2_b[$tn][0])){
+				$rtn2=$this->rc($c+1,$cn_k+$this->d2_b[$tn][0],$cn_c+$this->d2_b[$tn][1],$tn-1);
+				if($rtn2!==null){$rtn2+=$this->d2_b[$tn][1];}
+			}else{
+				$rtn2=null;
+			}
+			if($this->isBetter($rtn1,$rtn2)){
+				$rtn=$rtn1;
+			}else{
+				$rtn=$rtn2;
+			}
+
+			if($this->memo->write(array($c,$cn_k,$tn),$rtn)){
+				if($this->isBetter($rtn+$cn_c,$this->z_rt)){$this->z_rt=$rtn+$cn_c;}
+				return $rtn;
+			}else{
+				return $this->memo->read(array($c,$cn_k,$tn));
+			}
+		}
+	}
+	class test04_1 extends test04{//打ち切り条件追加：残り個数が最低個数に満たない、既に個数上限である
+		protected function isNotCheck($c,$cn_k,$cn_c,$tn):mixed{//打ち切り条件を並べる。hitしたら返り値を、何もhitしなければtrueを返す
+			if($tn<0){//要素を使い切っている場合
+				if($this->isUnder($c)){
+					return null;
+				}else{
+					return 0;
+				}
+			}
+			if($this->isUnder($c+$tn+1)){return null;}//残り個数が最低個数に満たない
+			if($this->isOver($c+1)){return 0;}//これが個数上限なら、この先測定条件値が増加することは無い。
+			$otn=$this->memo->read(array($c,$cn_k,$tn));
+			if($otn!==false){return $otn;}//メモに存在すればそれを返す
+			return true;
+		}
+	}
+	class test04_2fail extends test04{//打ち切り条件追加：残りすべてtnの比率でも無理確定
+		protected function isNotCheck($c,$cn_k,$cn_c,$tn):mixed{//打ち切り条件を並べる。hitしたら返り値を、何もhitしなければtrueを返す
+			if($tn<0){//要素を使い切っている場合
+				if($this->isUnder($c)){
+					return null;
+				}else{
+					return 0;
+				}
+			}
+			if($this->isUnder($c+$tn+1)){return null;}//残り個数が最低個数に満たない
+			if($this->isOver($c+1)){return 0;}//これが個数上限なら、この先測定条件値が増加することは無い。
+			if($this->rule===0){
+				if(($this->ln-$cn_k)*$this->d2_b[$tn][2] < $this->z_rt-$cn_c){return null;}//残り制限条件値全てがtnの比率でも暫定最大値に足りないなら、考えなくていい
+			}else{
+				if(($this->ln-$cn_k)*$this->d2_b[$tn][2] > $this->z_rt-$cn_c){return null;}//残り制限条件値全てがtnの比率でも暫定最小値を超えるのなら、考えなくていい
+			}
+
+			$otn=$this->memo->read(array($c,$cn_k,$tn));
+			if($otn!==false){return $otn;}//メモに存在すればそれを返す
+			return true;
+		}
+	}
+	class test04_3{//比率条件で打ち切った場合はfalseを返してメモに入れない。そのために、isBetterも修正。
+		//public $kp=0;//制限条件値の位置
+		//public $cp=1;//測定条件値の位置
+		//public $rule;//0なら制限条件境界値以下での測定条件値の最大値、1なら制限条件境界値以上での測定条件値の最小値を求める
+		public $tln;//個数条件値の最大値
+		public $bln;//個数条件値の最小値
+		//public $ln;//制限条件境界値
+		public $d2_b;//要素一覧
+		protected $memo;//メモ
+		protected $z_rt;//暫定限界値
+		public function __construct(public $ln,public $rule=0,$d1_t=array(null,null)){
+			$this->d2_b=array();
+			$this->bln=$d1_t[0];
+			$this->tln=$d1_t[1];
+			if($this->rule===0){
+				$this->memo=new \crast\memo(1);
+			}elseif($this->rule===1){
+				$this->memo=new \crast\memo(-1);
+			}
+		}
+		public function push($key,$value){
+			$this->d2_b[]=array($key,$value,$value/$key);
+		}
+		public function getReturn(){
+			if($this->rule===0){
+				$this->d2_b=\crast\c_sort($this->d2_b,2,0);
+			}else{
+				$this->d2_b=\crast\c_sort($this->d2_b,2,1);
+			}
+			$this->rc(0,0,0,count($this->d2_b)-1);
+			return $this->z_rt;
+		}
+		protected function isOver(int $c):bool{//個数上限を超えていたらtrue
+			return $this->tln!==null and $this->tln<$c;
+		}
+		protected function isUnder(int $c):bool{//個数下限を割っていたらtrue
+			return $this->bln!==null and $this->bln>$c;
+		}
+		protected function isSafe($cn_k):bool{//制限条件値合計がruleを満たすならtrue
+			if($this->rule==0){
+				return $cn_k<=$this->ln;
+			}else{
+				return $cn_k>=$this->ln;
+			}
+		}
+		protected function isBetter($rtn1,$rtn2){//rtn1の方がより良ければtrue
+			if($rtn2===false){
+				return true;
+			}elseif($rtn1===false){
+				return false;
+			}elseif($rtn2===null){
+				return true;
+			}elseif($rtn1===null){
+				return false;
+			}else{
+				if($this->rule===0){
+					return $rtn1>$rtn2;
+				}else{
+					return $rtn1<$rtn2;
+				}
+			}
+		}
+		protected function isNotCheck($c,$cn_k,$cn_c,$tn):mixed{//打ち切り条件を並べる。hitしたら返り値を、何もhitしなければtrueを返す
+			if($tn<0){//要素を使い切っている場合
+				if($this->isUnder($c)){
+					return null;
+				}else{
+					return 0;
+				}
+			}
+			if($this->isUnder($c+$tn+1)){return null;}//残り個数が最低個数に満たない
+			if($this->isOver($c+1)){return 0;}//これが個数上限なら、この先測定条件値が増加することは無い。
+
+			$otn=$this->memo->read(array($c,$cn_k,$tn));
+			if($otn!==false){return $otn;}//メモに存在すればそれを返す
+
+			//メモより優先度の低い打ち切り条件：falseを返す
+			if($this->rule===0){
+				if(($this->ln-$cn_k)*$this->d2_b[$tn][2] < $this->z_rt-$cn_c){return false;}//残り制限条件値全てがtnの比率でも暫定最大値に足りないなら、考えなくていい
+			}else{
+				if(($this->ln-$cn_k)*$this->d2_b[$tn][2] > $this->z_rt-$cn_c){return false;}//残り制限条件値全てがtnの比率でも暫定最小値を超えるのなら、考えなくていい
+			}
+
+			return true;
+		}
+		//再帰に必要な数値は、現在個数と現在制限条件値合計・現在測定条件値合計値、次にチェックする対象。
+		//出力値は、ruleに基づく測定条件値合計値$cn_cのこの先の増加分の最大値or最小値
+		//ただし、個数条件を満たしていない場合は返り値はnull
+		protected function rc($c,$cn_k,$cn_c,$tn){
+			$ot=$this->isNotCheck($c,$cn_k,$cn_c,$tn);
+			if($ot!==true){return $ot;}
+
+			//$tnを使う場合を考慮する条件
+			if(!$this->isover($c+1) and $this->isSafe($cn_k+$this->d2_b[$tn][0])){
+				$rtn2=$this->rc($c+1,$cn_k+$this->d2_b[$tn][0],$cn_c+$this->d2_b[$tn][1],$tn-1);
+				if($rtn2!==null and $rtn2!==false){$rtn2+=$this->d2_b[$tn][1];}
+			}else{
+				$rtn2=null;
+			}
+			$rtn1=$this->rc($c,$cn_k,$cn_c,$tn-1);//$tnを使わない場合の分岐　試しに順番変えてみたけど、結果ダメかあ。
+
+			if($this->isBetter($rtn1,$rtn2)){
+				$rtn=$rtn1;
+			}else{
+				$rtn=$rtn2;
+			}
+
+			if($rtn===false){return false;}//falseであれば、メモには入れない。メモ側でfalse条件入れるよりはこっちで分岐したほうがいいかなと。
+			if($this->memo->write(array($c,$cn_k,$tn),$rtn)){
+				if($this->isBetter($rtn+$cn_c,$this->z_rt)){$this->z_rt=$rtn+$cn_c;}
+				return $rtn;
+			}else{
+				return $this->memo->read(array($c,$cn_k,$tn));
+			}
+		}
+
+	}
+	class test05{//メモ利用型、打ち切り条件をメモと併用できるものだけに絞り込む
+		//public $kp=0;//制限条件値の位置
+		//public $cp=1;//測定条件値の位置
+		//public $rule;//0なら制限条件境界値以下での測定条件値の最大値、1なら制限条件境界値以上での測定条件値の最小値を求める
+		public $tln;//個数条件値の最大値
+		public $bln;//個数条件値の最小値
+		//public $ln;//制限条件境界値
+		public $d2_b;//要素一覧
+		protected $memo;//メモ
+		protected $d1_l;//制限条件値の位置ごと条件リスト
+		public function __construct(public $ln,public $rule=0,$d1_t=array(null,null)){
+			$this->d2_b=array();
+			$this->bln=$d1_t[0];
+			$this->tln=$d1_t[1];
+			if($this->rule===0){
+				$this->memo=new \crast\memo(1);
+			}elseif($this->rule===1){
+				$this->memo=new \crast\memo(-1);
+			}
+			$this->d1_l==array();
+		}
+		public function push($key,$value){
+			$this->d2_b[]=array($key,$value,$value/$key);
+		}
+		public function getReturn(){
+			$otln=count($this->d2_b);
+			$this->d2_b=\crast\c_sort($this->d2_b,2,$this->rule);
+			$this->d1_l[0]=$this->d2_b[0][0];
+			if($this->rule===0){
+				for($i1=1;$i1<$otln;$i1++){//rule===0であれば、範囲内の最低コストを並べる
+					$this->d1_l[$i1]=min($this->d1_l[$i1-1],$this->d2_b[$i1][0]);
+				}
+			}else{
+				for($i1=1;$i1<$otln;$i1++){//rule===1であれば、範囲内のコスト合計を並べる
+					$this->d1_l[$i1]=$this->d1_l[$i1-1]+$this->d2_b[$i1][0];
+				}
+			}
+
+			return $this->rc(0,0,0,count($this->d2_b)-1);
+		}
+		protected function isOver(int $c):bool{//個数上限を超えていたらtrue
+			return $this->tln!==null and $this->tln<$c;
+		}
+		protected function isUnder(int $c):bool{//個数下限を割っていたらtrue
+			return $this->bln!==null and $this->bln>$c;
+		}
+		protected function isSafe($cn_k):bool{//制限条件値合計がruleを満たすならtrue
+			if($this->rule==0){
+				return $cn_k<=$this->ln;
+			}else{
+				return $cn_k>=$this->ln;
+			}
+		}
+		protected function isBetter($rtn1,$rtn2){//rtn1の方がより良ければtrue
+			if($rtn2===false){
+				return true;
+			}elseif($rtn1===false){
+				return false;
+			}elseif($rtn2===null){
+				return true;
+			}elseif($rtn1===null){
+				return false;
+			}else{
+				if($this->rule===0){
+					return $rtn1>$rtn2;
+				}else{
+					return $rtn1<$rtn2;
+				}
+			}
+		}
+		protected function isNotCheck($c,$cn_k,$cn_c,$tn):mixed{//打ち切り条件を並べる。hitしたら返り値を、何もhitしなければtrueを返す
+			if($this->isUnder($c+$tn+1)){return false;}//残り個数が最低個数に満たない
+			if($this->isOver($c+1)){return 0;}//これが個数上限なら、この先測定条件値が増加することは無い。
+			if($tn<0){return 0;}//個数が足りているが、要素を使い切っている場合
+			if($this->rule===0){
+				if($this->d1_l[$tn]>$this->ln-$cn_k){//rule===0で、残り範囲の最小コストが残りコストを上回る=追加不能である場合
+					if($this->isUnder($c)){
+						return false;
+					}else{
+						return 0;
+					}
+				}
+			}else{
+				if(!$this->isUnder($c)){return 0;}//rule===1で、個数条件を満たしているなら、これ以上追加しないのが最善
+				if($this->d1_l[$tn]<$this->ln-$cn_k){return false;}//rule===1で、残り範囲の合計コストが残り必要コストを下回る=達成不能である場合
+			}
+
+			$otn=$this->memo->read(array($c,$cn_k,$tn));
+			if($otn!==false){return $otn;}//メモに存在すればそれを返す
+
+
+			return true;
+		}
+		//再帰に必要な数値は、現在個数と現在制限条件値合計・現在測定条件値合計値、次にチェックする対象。
+		//出力値は、ruleに基づく測定条件値合計値$cn_cのこの先の増加分の最大値or最小値
+		//ただし、個数条件を満たしていない場合は返り値はnull
+		protected function rc($c,$cn_k,$cn_c,$tn){
+			$ot=$this->isNotCheck($c,$cn_k,$cn_c,$tn);
+			if($ot!==true){return $ot;}
+
+			//$tnを使う場合を考慮する条件
+			if(!$this->isover($c+1) and $this->isSafe($cn_k+$this->d2_b[$tn][0])){
+				$rtn2=$this->rc($c+1,$cn_k+$this->d2_b[$tn][0],$cn_c+$this->d2_b[$tn][1],$tn-1);
+				if($rtn2!==false){$rtn2+=$this->d2_b[$tn][1];}
+			}else{
+				$rtn2=false;
+			}
+			$rtn1=$this->rc($c,$cn_k,$cn_c,$tn-1);//$tnを使わない場合の分岐
+
+			if($this->isBetter($rtn1,$rtn2)){
+				$rtn=$rtn1;
+			}else{
+				$rtn=$rtn2;
+			}
+
+			if($rtn===false){return false;}//falseであれば、メモには入れない。メモ側でfalse条件入れるよりはこっちで分岐したほうがいいかなと。
+
+			if($this->memo->write(array($c,$cn_k,$tn),$rtn)){
+				return $rtn;
+			}else{
+				return $this->memo->read(array($c,$cn_k,$tn));
+			}
+		}
+
+	}
+	class test06{//メモ無し、暫定限界値含みで枝刈り全力
+		//public $kp=0;//制限条件値の位置
+		//public $cp=1;//測定条件値の位置
+		//public $rule;//0なら制限条件境界値以下での測定条件値の最大値、1なら制限条件境界値以上での測定条件値の最小値を求める
+		public $tln;//個数条件値の最大値
+		public $bln;//個数条件値の最小値
+		//public $ln;//制限条件境界値
+		public $d2_b;//要素一覧
+		protected $memo;//メモ
+		protected $z_rt;//暫定限界値
+		protected $d1_l;//制限条件値の位置ごと条件リスト
+		public function __construct(public $ln,public $rule=0,$d1_t=array(null,null)){
+			$this->d2_b=array();
+			$this->bln=$d1_t[0];
+			$this->tln=$d1_t[1];
+			if($this->rule===0){
+				$this->memo=new \crast\memo(1);
+			}elseif($this->rule===1){
+				$this->memo=new \crast\memo(-1);
+			}
+			$this->d1_l==array();
+		}
+		public function push($key,$value){
+			$this->d2_b[]=array($key,$value,$value/$key);
+		}
+		public function getReturn(){
+			$otln=count($this->d2_b);
+			if($this->rule===0){
+				$this->d2_b=\crast\c_sort($this->d2_b,2,0);
+				$this->d1_l[0]=$this->d2_b[0][0];
+				for($i1=1;$i1<$otln;$i1++){//rule===0であれば、範囲内の最低コストを並べる
+					$this->d1_l[$i1]=min($this->d1_l[$i1-1],$this->d2_b[$i1][0]);
+				}
+			}else{
+				$this->d2_b=\crast\c_sort($this->d2_b,2,1);
+				$this->d1_l[0]=$this->d2_b[0][0];
+				for($i1=1;$i1<$otln;$i1++){//rule===1であれば、範囲内のコスト合計を並べる
+					$this->d1_l[$i1]=$this->d1_l[$i1-1]+$this->d2_b[$i1][0];
+				}
+			}
+
+			return $this->rc(0,0,0,count($this->d2_b)-1);
+		}
+		protected function isOver(int $c):bool{//個数上限を超えていたらtrue
+			return $this->tln!==null and $this->tln<$c;
+		}
+		protected function isUnder(int $c):bool{//個数下限を割っていたらtrue
+			return $this->bln!==null and $this->bln>$c;
+		}
+		protected function isSafe($cn_k):bool{//制限条件値合計がruleを満たすならtrue
+			if($this->rule==0){
+				return $cn_k<=$this->ln;
+			}else{
+				return $cn_k>=$this->ln;
+			}
+		}
+		protected function isBetter($rtn1,$rtn2){//rtn1の方がより良ければtrue
+			if($rtn2===false){
+				return true;
+			}elseif($rtn1===false){
+				return false;
+			}elseif($rtn2===null){
+				return true;
+			}elseif($rtn1===null){
+				return false;
+			}else{
+				if($this->rule===0){
+					return $rtn1>$rtn2;
+				}else{
+					return $rtn1<$rtn2;
+				}
+			}
+		}
+		protected function isNotCheck($c,$cn_k,$cn_c,$tn):mixed{//打ち切り条件を並べる。hitしたら返り値を、何もhitしなければtrueを返す
+			if($this->isUnder($c+$tn+1)){return false;}//残り個数が最低個数に満たない
+			if($this->isOver($c+1)){return 0;}//これが個数上限なら、この先測定条件値が増加することは無い。
+			if($tn<0){return 0;}//個数が足りているが、要素を使い切っている場合
+
+			if($this->rule===0){
+				if($this->d1_l[$tn]>$this->ln-$cn_k){//rule===0で、残り範囲の最小コストが残りコストを上回る=追加不能である場合
+					if($this->isUnder($c)){return false;}
+					else{return 0;}
+				}
+			}else{
+				if(!$this->isUnder($c)){return 0;}//rule===1で、個数条件を満たしているなら、これ以上追加しないのが最善
+				if($this->d1_l[$tn]<$this->ln-$cn_k){return false;}//rule===1で、残り範囲の合計コストが残り必要コストを下回る=達成不能である場合
+			}
+
+			if($this->rule===0){
+				if(($this->ln-$cn_k)*$this->d2_b[$tn][2] < $this->z_rt-$cn_c){return false;}//残り制限条件値全てがtnの比率でも暫定最大値に足りないなら、考えなくていい
+			}else{
+				if(($this->ln-$cn_k)*$this->d2_b[$tn][2] > $this->z_rt-$cn_c){return false;}//残り制限条件値全てがtnの比率でも暫定最小値を超えるのなら、考えなくていい
+			}
+
+			return true;
+		}
+		//再帰に必要な数値は、現在個数と現在制限条件値合計・現在測定条件値合計値、次にチェックする対象。
+		//出力値は、ruleに基づく測定条件値合計値$cn_cのこの先の増加分の最大値or最小値
+		//ただし、個数条件を満たしていない場合は返り値はnull
+		protected function rc($c,$cn_k,$cn_c,$tn){
+			$ot=$this->isNotCheck($c,$cn_k,$cn_c,$tn);
+			if($ot!==true){return $ot;}
+
+			//$tnを使う場合を考慮する条件
+			if(!$this->isover($c+1) and $this->isSafe($cn_k+$this->d2_b[$tn][0])){
+				$rtn2=$this->rc($c+1,$cn_k+$this->d2_b[$tn][0],$cn_c+$this->d2_b[$tn][1],$tn-1);
+				if($rtn2!==null and $rtn2!==false){$rtn2+=$this->d2_b[$tn][1];}
+			}else{
+				$rtn2=null;
+			}
+			$rtn1=$this->rc($c,$cn_k,$cn_c,$tn-1);//$tnを使わない場合の分岐
+
+			if($this->isBetter($rtn1,$rtn2)){
+				$rtn=$rtn1;
+			}else{
+				$rtn=$rtn2;
+			}
+
+			if($rtn===false){return false;}//falseであれば、メモには入れない。メモ側でfalse条件入れるよりはこっちで分岐したほうがいいかなと。
+			if($this->memo->write(array($c,$cn_k,$tn),$rtn)){
+				if($this->isBetter($rtn+$cn_c,$this->z_rt)){$this->z_rt=$rtn+$cn_c;}
+				return $rtn;
+			}else{
+				return $this->memo->read(array($c,$cn_k,$tn));
+			}
+		}
+
+
+	}
+	class test05_2 extends test05{//メモ利用型に、再帰前の絞り込みを追加
+		protected function rc($c,$cn_k,$cn_c,$tn){
+			$ot=$this->isNotCheck($c,$cn_k,$cn_c,$tn);
+			if($ot!==true){return $ot;}
+
+			//$tnを使う場合を考慮する条件
+			if($this->isSafe($cn_k+$this->d2_b[$tn][0])){
+				$rtn2=$this->rc($c+1,$cn_k+$this->d2_b[$tn][0],$cn_c+$this->d2_b[$tn][1],$tn-1);
+				if($rtn2!==false){$rtn2+=$this->d2_b[$tn][1];}
+			}else{
+				$rtn2=false;
+			}
+
+			/**
+			 * $tnを使わない場合を考慮する条件
+			 * 
+			 * １、$tnを使って有意な値が得られて、($tnを使ってfalseなら、使わない場合を探索するしかない)
+			 * ２、$tnが最後でなくて、($tn=0だと条件3の計算がバグる。それに、最後なら即座に0が返るだけなので枝刈りする価値がない)
+			 * ３、次以降の理論限界値が$rtn2に負けている場合、(基本条件。)
+			 * 以上3つが満たされるなら、$tnを使わない場合を考慮する意味はないのでfalse
+			 */
+			if($rtn2 and $tn>0 and $this->isBetter($rtn2,($this->ln-$cn_k)*$this->d2_b[$tn-1][2])){
+				$rtn1=false;
+			}else{
+				$rtn1=$this->rc($c,$cn_k,$cn_c,$tn-1);
+			}
+
+			if($this->isBetter($rtn1,$rtn2)){
+				$rtn=$rtn1;
+			}else{
+				$rtn=$rtn2;
+			}
+
+			if($rtn===false){return false;}//falseであれば、メモには入れない。メモ側でfalse条件入れるよりはこっちで分岐したほうがいいかなと。
+
+			if($this->memo->write(array($c,$cn_k,$tn),$rtn)){
+				return $rtn;
+			}else{
+				return $this->memo->read(array($c,$cn_k,$tn));
+			}
+		}
+	}
+	class test05_3{//05_2の成果をべた書きで速度測定
+		//public $kp=0;//制限条件値の位置
+		//public $cp=1;//測定条件値の位置
+		//public $rule;//0なら制限条件境界値以下での測定条件値の最大値、1なら制限条件境界値以上での測定条件値の最小値を求める
+		public $tln;//個数条件値の最大値
+		public $bln;//個数条件値の最小値
+		//public $ln;//制限条件境界値
+		public $d2_b;//要素一覧
+		protected $memo;//メモ
+		protected $d1_l;//制限条件値の位置ごと条件リスト
+		public function __construct(public $ln,public $rule=0,$d1_t=array(null,null)){
+			$this->d2_b=array();
+			$this->bln=$d1_t[0];
+			$this->tln=$d1_t[1];
+			if($this->rule===0){
+				$this->memo=new \crast\memo(1);
+			}elseif($this->rule===1){
+				$this->memo=new \crast\memo(-1);
+			}
+			$this->d1_l==array();
+		}
+		public function push($key,$value){
+			$this->d2_b[]=array($key,$value,$value/$key);
+		}
+		public function getReturn(){
+			$otln=count($this->d2_b);
+			$this->d2_b=\crast\c_sort($this->d2_b,2,$this->rule);
+			$this->d1_l[0]=$this->d2_b[0][0];
+			if($this->rule===0){
+				for($i1=1;$i1<$otln;$i1++){//rule===0であれば、範囲内の最低コストを並べる
+					$this->d1_l[$i1]=min($this->d1_l[$i1-1],$this->d2_b[$i1][0]);
+				}
+			}else{
+				for($i1=1;$i1<$otln;$i1++){//rule===1であれば、範囲内のコスト合計を並べる
+					$this->d1_l[$i1]=$this->d1_l[$i1-1]+$this->d2_b[$i1][0];
+				}
+			}
+
+			return $this->rc(0,0,0,count($this->d2_b)-1);
+		}
+		protected function isOver(int $c):bool{//個数上限を超えていたらtrue
+			return $this->tln!==null and $this->tln<$c;
+		}
+		protected function isUnder(int $c):bool{//個数下限を割っていたらtrue
+			return $this->bln!==null and $this->bln>$c;
+		}
+		protected function isSafe($cn_k):bool{//制限条件値合計がruleを満たすならtrue
+			if($this->rule==0){
+				return $cn_k<=$this->ln;
+			}else{
+				return $cn_k>=$this->ln;
+			}
+		}
+		protected function isBetter($rtn1,$rtn2){//rtn1の方がより良ければtrue
+			if($rtn2===false){
+				return true;
+			}elseif($rtn1===false){
+				return false;
+			}elseif($rtn2===null){
+				return true;
+			}elseif($rtn1===null){
+				return false;
+			}else{
+				if($this->rule===0){
+					return $rtn1>$rtn2;
+				}else{
+					return $rtn1<$rtn2;
+				}
+			}
+		}
+		protected function isNotCheck($c,$cn_k,$cn_c,$tn):mixed{//打ち切り条件を並べる。hitしたら返り値を、何もhitしなければtrueを返す
+			if($this->isUnder($c+$tn+1)){return false;}//残り個数が最低個数に満たない
+			if($this->isOver($c+1)){return 0;}//これが個数上限なら、この先測定条件値が増加することは無い。
+			if($tn<0){return 0;}//個数が足りているが、要素を使い切っている場合
+			if($this->rule===0){
+				if($this->d1_l[$tn]>$this->ln-$cn_k){//rule===0で、残り範囲の最小コストが残りコストを上回る=追加不能である場合
+					if($this->isUnder($c)){
+						return false;
+					}else{
+						return 0;
+					}
+				}
+			}else{
+				if(!$this->isUnder($c)){return 0;}//rule===1で、個数条件を満たしているなら、これ以上追加しないのが最善
+				if($this->d1_l[$tn]<$this->ln-$cn_k){return false;}//rule===1で、残り範囲の合計コストが残り必要コストを下回る=達成不能である場合
+			}
+
+			$otn=$this->memo->read(array($c,$cn_k,$tn));
+			if($otn!==false){return $otn;}//メモに存在すればそれを返す
+
+
+			return true;
+		}
+		//再帰に必要な数値は、現在個数と現在制限条件値合計・現在測定条件値合計値、次にチェックする対象。
+		//出力値は、ruleに基づく測定条件値合計値$cn_cのこの先の増加分の最大値or最小値
+		//ただし、個数条件を満たしていない場合は返り値はnull
+		protected function rc($c,$cn_k,$cn_c,$tn){
+			$ot=$this->isNotCheck($c,$cn_k,$cn_c,$tn);
+			if($ot!==true){return $ot;}
+
+			//$tnを使う場合を考慮する条件
+			if($this->isSafe($cn_k+$this->d2_b[$tn][0])){
+				$rtn2=$this->rc($c+1,$cn_k+$this->d2_b[$tn][0],$cn_c+$this->d2_b[$tn][1],$tn-1);
+				if($rtn2!==false){$rtn2+=$this->d2_b[$tn][1];}
+			}else{
+				$rtn2=false;
+			}
+
+			/**
+			 * $tnを使わない場合を考慮する条件
+			 * 
+			 * １、$tnを使って有意な値が得られて、($tnを使ってfalseなら、使わない場合を探索するしかない)
+			 * ２、$tnが最後でなくて、($tn=0だと条件3の計算がバグる。それに、最後なら即座に0が返るだけなので枝刈りする価値がない)
+			 * ３、次以降の理論限界値が$rtn2に負けている場合、(基本条件。)
+			 * 以上3つが満たされるなら、$tnを使わない場合を考慮する意味はないのでfalse
+			 */
+			if($rtn2 and $tn>0 and $this->isBetter($rtn2,($this->ln-$cn_k)*$this->d2_b[$tn-1][2])){
+				$rtn1=false;
+			}else{
+				$rtn1=$this->rc($c,$cn_k,$cn_c,$tn-1);
+			}
+
+			if($this->isBetter($rtn1,$rtn2)){
+				$rtn=$rtn1;
+			}else{
+				$rtn=$rtn2;
+			}
+
+			if($rtn===false){return false;}//falseであれば、メモには入れない。メモ側でfalse条件入れるよりはこっちで分岐したほうがいいかなと。
+
+			if($this->memo->write(array($c,$cn_k,$tn),$rtn)){
+				return $rtn;
+			}else{
+				return $this->memo->read(array($c,$cn_k,$tn));
+			}
+		}
+
+	}
+	class test06_2{//メモ無し、コストもリスト化して枝刈り
+		//public $kp=0;//制限条件値の位置
+		//public $cp=1;//測定条件値の位置
+		//public $rule;//0なら制限条件境界値以下での測定条件値の最大値、1なら制限条件境界値以上での測定条件値の最小値を求める
+		protected $tln;//個数条件値の最大値
+		protected $bln;//個数条件値の最小値
+		//public $ln;//制限条件境界値
+		public $d2_b;//要素一覧
+		protected $z_rt;//暫定限界値
+		protected $d1_kl;//制限条件値の位置ごと条件リスト
+		protected $d1_vl;//測定条件値の位置ごと条件リスト
+		public function __construct(public $ln,public $rule=0,$d1_t=array(null,null)){
+			$this->d2_b=array();
+			$this->bln=$d1_t[0];
+			$this->tln=$d1_t[1];
+		}
+		public function push($key,$value){
+			$this->d2_b[]=array($key,$value,$value/$key);
+		}
+		public function getReturn(){
+			$this->d1_kl=array();
+			$this->d1_vl=array();//チェックリストの初期化
+			$cn_b=count($this->d2_b);
+			$this->d2_b=\crast\c_sort($this->d2_b,2,$this->rule);
+			$this->d1_kl[0]=$this->d2_b[0][0];
+			$this->d1_vl[0]=$this->d2_b[0][1];
+			if($this->rule===0){
+				for($i1=1;$i1<$cn_b;$i1++){//rule===0であれば、範囲内の最低コストと測定値合計を並べる
+					$this->d1_kl[$i1]=min($this->d1_kl[$i1-1],$this->d2_b[$i1][0]);
+					$this->d1_vl[$i1]=$this->d1_vl[$i1-1]+$this->d2_b[$i1][1];
+				}
+			}else{
+				for($i1=1;$i1<$cn_b;$i1++){//rule===1であれば、範囲内のコスト合計と最低測定値を並べる
+					$this->d1_kl[$i1]=$this->d1_kl[$i1-1]+$this->d2_b[$i1][0];
+					$this->d1_vl[$i1]=min($this->d1_vl[$i1-1],$this->d2_b[$i1][1]);
+				}
+			}
+
+			$this->rc(0,0,0,count($this->d2_b)-1);
+			return $this->z_rt;
+		}
+		protected function isOver(int $c):bool{//個数上限を超えていたらtrue
+			return $this->tln!==null and $this->tln<$c;
+		}
+		protected function isUnder(int $c):bool{//個数下限を割っていたらtrue
+			return $this->bln!==null and $this->bln>$c;
+		}
+		protected function isSafe($cn_k):bool{//制限条件値合計がruleを満たすならtrue
+			if($this->rule==0){
+				return $cn_k<=$this->ln;
+			}else{
+				return $cn_k>=$this->ln;
+			}
+		}
+		protected function isBetter($rtn1,$rtn2){//rtn1の方がより良ければtrue
+			if($rtn2===false){
+				return true;
+			}elseif($rtn1===false){
+				return false;
+			}elseif($rtn2===null){
+				return true;
+			}elseif($rtn1===null){
+				return false;
+			}else{
+				if($this->rule===0){
+					return $rtn1>$rtn2;
+				}else{
+					return $rtn1<$rtn2;
+				}
+			}
+		}
+		protected function isNotCheck($c,$cn_k,$cn_c,$tn):mixed{//打ち切り条件を並べる。hitしたら返り値を、何もhitしなければtrueを返す
+			if($this->isUnder($c+$tn+1)){return false;}//残り個数が最低個数に満たない
+			if($this->isOver($c+1)){return 0;}//これが個数上限なら、この先測定条件値が増加することは無い。
+			if($tn<0){return 0;}//個数が足りているが、要素を使い切っている場合
+
+			if($this->rule===0){
+				if($this->d1_kl[$tn]>$this->ln-$cn_k){//rule===0で、残り範囲の最小コストが残りコストを上回る=追加不能である場合
+					if($this->isUnder($c)){return false;}
+					else{return 0;}
+				}
+				if($this->d1_vl[$tn]<=$this->z_rt-$cn_c){return false;}//rule===0で、残り範囲の測定値合計が暫定最大値以下なら、無駄。
+			}else{
+				if(!$this->isUnder($c)){return 0;}//rule===1で、個数条件を満たしているなら、これ以上追加しないのが最善
+				if($this->d1_kl[$tn]<$this->ln-$cn_k){return false;}//rule===1で、残り範囲の合計コストが残り必要コストを下回る=達成不能である場合
+				if($this->d1_vl[$tn]>=$this->z_rt-$cn_c){return false;}//rule===1で、残り範囲の最低測定値が暫定最大値以上なら、無駄。
+			}
+
+			if($this->isBetter($this->z_rt-$cn_c,($this->ln-$cn_k)*$this->d2_b[$tn][2])){return false;}//残り制限条件値全てがtnの比率でも暫定限界値に劣るなら、考えなくていい
+
+			return true;
+		}
+		//再帰に必要な数値は、現在個数と現在制限条件値合計・現在測定条件値合計値、次にチェックする対象。
+		//出力値は、ruleに基づく測定条件値合計値$cn_cのこの先の増加分の最大値or最小値
+		//ただし、個数条件を満たしていない場合は返り値はnull
+		protected function rc($c,$cn_k,$cn_c,$tn){
+			$ot=$this->isNotCheck($c,$cn_k,$cn_c,$tn);
+			//if($ot!==true){return $ot;}
+			if($ot===true){
+			}elseif($ot===false){
+				return $ot;
+			}else{
+				if($this->isBetter($ot+$cn_c,$this->z_rt)){
+					$this->z_rt=$ot+$cn_c;
+				}
+				return $ot;
+			}
+
+			//$tnを使う場合を考慮する条件
+			if(!$this->isover($c+1) and $this->isSafe($cn_k+$this->d2_b[$tn][0])){
+				$rtn2=$this->rc($c+1,$cn_k+$this->d2_b[$tn][0],$cn_c+$this->d2_b[$tn][1],$tn-1);
+				if($rtn2!==null and $rtn2!==false){$rtn2+=$this->d2_b[$tn][1];}
+			}else{
+				$rtn2=false;
+			}
+			$rtn1=$this->rc($c,$cn_k,$cn_c,$tn-1);//$tnを使わない場合の分岐
+
+			if($this->isBetter($rtn1,$rtn2)){
+				$rtn=$rtn1;
+			}else{
+				$rtn=$rtn2;
+			}
+
+			if($rtn===false){return false;}//falseであれば、メモには入れない。メモ側でfalse条件入れるよりはこっちで分岐したほうがいいかなと。
+			if($this->memo->write(array($c,$cn_k,$tn),$rtn)){
+				if($this->isBetter($rtn+$cn_c,$this->z_rt)){$this->z_rt=$rtn+$cn_c;}
+				return $rtn;
+			}else{
+				return $this->memo->read(array($c,$cn_k,$tn));
+			}
+		}
+
+
+	}
+
+}
+namespace crast\knapsack\challenge1{
+	//とりあえず、制限条件値と測定条件値の比でソートする。
+	//ルール上有用な方からひとつずつ追加して、ひとつ前時点での個数ごとのメモに追加した場合としなかった場合の混合を
+	//今回のメモとして次に送る、を繰り返してメモを拡充、最終的に全範囲での値を出力、という方向でやってみる。
+	//範囲個数ごとに更新、採用個数・採用分の制限条件値合計に対して測定条件値合計の最適解をメモに入れる。
+	class test{
+		//public $kp=0;//制限条件値の位置
+		//public $cp=1;//測定条件値の位置
+		//public $rule;//0なら制限条件境界値以下での測定条件値の最大値、1なら制限条件境界値以上での測定条件値の最小値を求める
+		public $tln;//個数条件値の最大値
+		public $bln;//個数条件値の最小値
+		//public $ln;//制限条件境界値
+		public $d2_b;//要素一覧
+		protected $memo;//メモ
+		protected $z_rt;//暫定出力値
+		protected $min_k;//制限条件値最低値、制限条件値の余りがここ未満なら打ち切れる
+		public function __construct(public $ln,public $rule=0,array $d1_t=array(null,null)){
+			$this->d2_b=array();
+			$this->bln=$d1_t[0];
+			$this->tln=$d1_t[1];
+			$this->memo=new \crast\memo((-1)**$rule,null,true);//rule=0なら大きいものに上書き、rule=1なら小さいものに上書き
+			$this->z_rt=false;//解が存在しない場合はfalseを出力する。部分も全体も。
+		}
+		public function push($key,$value){
+			$this->d2_b[]=array($key,$value,$value/$key);
+		}
+		public function getReturn(){
+			//まず、有利なものが後になる用に並べ替える
+			if($this->rule===0){
+				$this->d2_b=\crast\c_sort($this->d2_b,2,0);
+			}else{
+				$this->d2_b=\crast\c_sort($this->d2_b,2,1);
+			}
+			return $this->rc(0,0,0,count($this->d2_b)-1);
+		}
+		protected function isOver(int $c):bool{//個数上限を超えていたらtrue
+			return $this->tln!==null and $this->tln<$c;
+		}
+		protected function isUnder(int $c):bool{//個数下限を割っていたらtrue
+			return $this->bln!==null and $this->bln>$c;
+		}
+		protected function isSafe($cn_k):bool{//制限条件値合計がruleを満たすならtrue
+			if($this->rule==0){
+				return $cn_k<=$this->ln;
+			}else{
+				return $cn_k>=$this->ln;
+			}
+		}
+		protected function isBetter($rtn1,$rtn2){//rtn1の方がより良ければtrue
+			if($rtn2===false){
+				return true;
+			}elseif($rtn1===false){
+				return false;
+			}else{
+				if($this->rule==0){
+					return $rtn1>=$rtn2;
+				}else{
+					return $rtn1<=$rtn2;
+				}
+			}
+		}
+		//今回の打ち切り条件
+		protected function isNotCheck($c,$cn_k,$cn_c,$tn):mixed{//打ち切り条件を並べる。hitしたら返り値を、何もhitしなければtrueを返す(falseは正しい返り値であるため)
+			if($tn<0){return 0;}//既に要素を使い切っているなら、0として再帰を終える
+			if($this->isUnder($c+$tn+1)){return false;}//残り個数が最低個数に満たない
+			if($this->isOver($c+1)){return 0;}//これが個数上限なら、この先測定条件値が増加することは無い。
+			$rt=$this->memo->read(array($cn_k,$tn,$c));
+			if($rt!==false){return $rt;}//メモに既にあるならその値を返す
+			return true;
+		}
+		//再帰に必要な数値は、現在個数cと現在制限条件値合計cn_k・現在測定条件値合計値cn_c、次にチェックする対象tn。
+		//出力値rtnは、rule0に基づく測定条件値合計値$cn_cのここから先での上昇量の限界値
+		//更新される暫定出力値は、ここまでの上昇量cn_cとここからの上昇量限界値rtnの合計値
+		//ただし、個数不足その他で打ち切った場合は返り値はfalse
+		//$tn+1～のうち$c個で制限条件値が合計$cn_k、測定条件値が合計$cn_c、の状態で、$tnを使うか使わないかで分けて再帰
+		//メモには、array($cn_k,$tn,$c)に、rtnを入れる。
+		protected function rc($c,$cn_k,$cn_c,$tn){
+
+			$ot=$this->isNotCheck($c,$cn_k,$cn_c,$tn);
+			if($ot!==true){return $ot;}//打ち切り条件を満たすならそれぞれの返り値を返す
+
+			//再帰する場合
+			$rtn1=$this->rc($c,$cn_k,$cn_c,$tn-1);//$tnを使わない場合の分岐
+			//$tnを使う場合を考慮する条件
+			if(!$this->isover($c+1) and $this->isSafe($cn_k+$this->d2_b[$tn][0])){
+				$rtn2=$this->rc($c+1,$cn_k+$this->d2_b[$tn][0],$cn_c+$this->d2_b[$tn][1],$tn-1);
+				if($rtn2!==false){$rtn2+=$this->d2_b[$tn][1];}
+			}else{
+				$rtn2=false;
+			}
+
+			if($this->isBetter($rtn1,$rtn2)){
+				$rtn=$rtn1;
+			}else{
+				$rtn=$rtn2;
+			}
+			if($this->isBetter($rtn+$cn_c,$this->z_rt)){$this->z_rt=$rtn;}
+			$this->memo->write(array($cn_k,$tn,$c),$rtn);
+			return $rtn;
+
+		}
+	}
+	class test2{//
+		//public $kp=0;//制限条件値の位置
+		//public $cp=1;//測定条件値の位置
+		//public $rule;//0なら制限条件境界値以下での測定条件値の最大値、1なら制限条件境界値以上での測定条件値の最小値を求める
+		public $tln;//個数条件値の最大値
+		public $bln;//個数条件値の最小値
+		//public $ln;//制限条件境界値
+		public $d2_b;//要素一覧
+		protected $memo;//メモ
+		protected $z_rt;//暫定出力値
+		protected $min_k;//制限条件値最低値、制限条件値の余りがここ未満なら打ち切れる
+		public function __construct(public $ln,public $rule=0,array $d1_t=array(null,null)){
+			$this->d2_b=array();
+			$this->bln=$d1_t[0];
+			$this->tln=$d1_t[1];
+			if($rule===0){
+				$this->memo=new \crast\memo(2,null,true);//falseに対応したcompare2を使う
+			}else{
+				$this->memo=new \crast\memo(-2,null,true);
+			}
+			$this->z_rt=0;//解が存在しない場合はfalseを出力する。部分も全体も。
+		}
+		public function push($key,$value){
+			$this->d2_b[]=array($key,$value,$value/$key);
+		}
+		protected function isOver(int $c):bool{//個数上限を超えていたらtrue
+			return $this->tln!==null and $this->tln<$c;
+		}
+		protected function isUnder(int $c):bool{//個数下限を割っていたらtrue
+			return $this->bln!==null and $this->bln>$c;
+		}
+		protected function isSafe($cn_k):bool{//制限条件値合計がruleを満たすならtrue
+			if($this->rule==0){
+				return $cn_k<=$this->ln;
+			}else{
+				return $cn_k>=$this->ln;
+			}
+		}
+		protected function isBetter($rtn1,$rtn2){//rtn1の方がより良ければtrue
+			if($rtn2===false){
+				return true;
+			}elseif($rtn1===false){
+				return false;
+			}else{
+				if($this->rule==0){
+					return $rtn1>=$rtn2;
+				}else{
+					return $rtn1<=$rtn2;
+				}
+			}
+		}
+		public function getReturn(){
+			//まず、有利なものが後になる用に並べ替える
+			if($this->rule===0){
+				$this->d2_b=\crast\c_sort($this->d2_b,2,0);
+			}else{
+				$this->d2_b=\crast\c_sort($this->d2_b,2,1);
+			}
+			//貪欲法で暫定限界値を作る
+			$otln=count($this->d2_b);
+			$otcn=0;
+			for($i1=1;$i1<=$otln;$i1++){
+				$otcn+=$this->d2_b[$otln-$i1][0];
+				$this->z_rt+=$this->d2_b[$otln-$i1][1];
+				if($this->rule===0){
+					if($this->isOver($i1) or !$this->isSafe($otcn)){//個数条件or制限条件値境界を超えたら、ひとつ前を暫定最大値とする
+						$otcn-=$this->d2_b[$otln-$i1][0];
+						$this->z_rt-=$this->d2_b[$otln-$i1][1];
+						$i1--;
+						break;
+					}
+				}else{
+					if(!$this->isUnder($i1) and $this->isSafe($otcn)){break;}//個数条件内and制限条件範囲内なら、最小個数で暫定最小値とする
+				}
+			}
+			return $this->rc(0,0,0,count($this->d2_b)-1);
+		}
+		//今回の打ち切り条件
+		protected function isNotCheck($c,$cn_k,$cn_c,$tn):mixed{//打ち切り条件を並べる。hitしたら返り値を、何もhitしなければtrueを返す(falseは正しい返り値であるため)
+			if($tn<0){return 0;}//既に要素を使い切っているなら、0として再帰を終える
+			if($this->isUnder($c+$tn+1)){return false;}//残り個数が最低個数に満たない
+			if($this->isOver($c+1)){return 0;}//これが個数上限なら、この先測定条件値が増加することは無い。
+			if($this->ln-$cn_k<$this->min_k){return 0;}//既にコストを使い切っているなら、0として再帰を終える
+			if($this->rule===0){
+				if(($this->ln-$cn_k)*$this->d2_b[$tn][2] < $this->z_rt-$cn_c){return false;}//残り制限条件値全てがtnの比率でも暫定最大値に足りないなら、考えなくていい
+			}else{
+				if(($this->ln-$cn_k)*$this->d2_b[$tn][2] > $this->z_rt-$cn_c){return false;}//残り制限条件値全てがtnの比率でも暫定最小値を超えるのなら、考えなくていい
+			}
+			$rt=$this->memo->read(array($cn_k,$tn,$c));
+			if($rt!==false){return $rt;}//メモに既にあるならその値を返す
+			return true;
+		}
+		//再帰に必要な数値は、現在個数cと現在制限条件値合計cn_k・現在測定条件値合計値cn_c、次にチェックする対象tn。
+		//出力値rtnは、rule0に基づく測定条件値合計値$cn_cのここから先での上昇量の限界値
+		//更新される暫定出力値は、ここまでの上昇量cn_cとここからの上昇量限界値rtnの合計値
+		//ただし、個数不足その他で打ち切った場合は返り値はfalse
+		//$tn+1～のうち$c個で制限条件値が合計$cn_k、測定条件値が合計$cn_c、の状態で、$tnを使うか使わないかで分けて再帰
+		//メモには、array($cn_k,$tn,$c)に、rtnを入れる。
+		protected function rc($c,$cn_k,$cn_c,$tn){
+
+			$ot=$this->isNotCheck($c,$cn_k,$cn_c,$tn);
+			if($ot!==true){return $ot;}//打ち切り条件を満たすならそれぞれの返り値を返す
+
+			//再帰する場合
+			$rtn1=$this->rc($c,$cn_k,$cn_c,$tn-1);//$tnを使わない場合の分岐
+			//$tnを使う場合を考慮する条件
+			if(!$this->isover($c+1) and $this->isSafe($cn_k+$this->d2_b[$tn][0])){
+				$rtn2=$this->rc($c+1,$cn_k+$this->d2_b[$tn][0],$cn_c+$this->d2_b[$tn][1],$tn-1);
+				if($rtn2!==false){$rtn2+=$this->d2_b[$tn][1];}
+			}else{
+				$rtn2=false;
+			}
+
+			if($this->isBetter($rtn1,$rtn2)){
+				$rtn=$rtn1;
+			}else{
+				$rtn=$rtn2;
+			}
+			if($this->isBetter($rtn+$cn_c,$this->z_rt)){$this->z_rt=$rtn;}//$this->z_rt=$rtnになってたのはダメなんでは。→なぜか結果が変わることがある。なぜだ。
+			$this->memo->write(array($cn_k,$tn,$c),$rtn);
+			return $rtn;
+
+		}
+	}
+
+	class test3{//falseをメモに入れてもあるのかないのか判別できないので、nullを入れるようにする。
+		//public $kp=0;//制限条件値の位置
+		//public $cp=1;//測定条件値の位置
+		//public $rule;//0なら制限条件境界値以下での測定条件値の最大値、1なら制限条件境界値以上での測定条件値の最小値を求める
+		public $tln;//個数条件値の最大値
+		public $bln;//個数条件値の最小値
+		//public $ln;//制限条件境界値
+		public $d2_b;//要素一覧
+		protected $memo;//メモ
+		protected $z_rt;//暫定出力値
+		protected $min_k;//制限条件値最低値、制限条件値の余りがここ未満なら打ち切れる
+		public function __construct(public $ln,public $rule=0,array $d1_t=array(null,null)){
+			$this->d2_b=array();
+			$this->bln=$d1_t[0];
+			$this->tln=$d1_t[1];
+			if($rule===0){
+				$this->memo=new \crast\memo(2,null,true);//falseに対応したcompare2を使う
+			}else{
+				$this->memo=new \crast\memo(-2,null,true);
+			}
+			$this->z_rt=0;//解が存在しない場合はfalseを出力する。部分も全体も。
+		}
+		public function push($key,$value){
+			$this->d2_b[]=array($key,$value,$value/$key);
+		}
+		protected function isOver(int $c):bool{//個数上限を超えていたらtrue
+			return $this->tln!==null and $this->tln<$c;
+		}
+		protected function isUnder(int $c):bool{//個数下限を割っていたらtrue
+			return $this->bln!==null and $this->bln>$c;
+		}
+		protected function isSafe($cn_k):bool{//制限条件値合計がruleを満たすならtrue
+			if($this->rule==0){
+				return $cn_k<=$this->ln;
+			}else{
+				return $cn_k>=$this->ln;
+			}
+		}
+		protected function isBetter($rtn1,$rtn2){//rtn1の方がより良ければtrue
+			if($rtn2===null){
+				return true;
+			}elseif($rtn1===null){
+				return false;
+			}else{
+				if($this->rule==0){
+					return $rtn1>=$rtn2;//＝は含まなくていいんでは。→誤答する。なんでだ。
+				}else{
+					return $rtn1<=$rtn2;
+				}
+			}
+		}
+		public function getReturn(){
+			//まず、有利なものが後になる用に並べ替える
+			if($this->rule===0){
+				$this->d2_b=\crast\c_sort($this->d2_b,2,0);
+			}else{
+				$this->d2_b=\crast\c_sort($this->d2_b,2,1);
+			}
+			//貪欲法で暫定限界値を作る
+			$otln=count($this->d2_b);
+			$otcn=0;
+			for($i1=1;$i1<=$otln;$i1++){
+				$otcn+=$this->d2_b[$otln-$i1][0];
+				$this->z_rt+=$this->d2_b[$otln-$i1][1];
+				if($this->rule===0){
+					if($this->isOver($i1) or !$this->isSafe($otcn)){//個数条件or制限条件値境界を超えたら、ひとつ前を暫定最大値とする
+						$otcn-=$this->d2_b[$otln-$i1][0];
+						$this->z_rt-=$this->d2_b[$otln-$i1][1];
+						$i1--;
+						break;
+					}
+				}else{
+					if(!$this->isUnder($i1) and $this->isSafe($otcn)){break;}//個数条件内and制限条件範囲内なら、最小個数で暫定最小値とする
+				}
+			}
+			return $this->rc(0,0,0,count($this->d2_b)-1);
+		}
+		//今回の打ち切り条件
+		protected function isNotCheck($c,$cn_k,$cn_c,$tn):mixed{//打ち切り条件を並べる。hitしたら返り値を、何もhitしなければtrueを返す(falseは正しい返り値であるため)
+			if($tn<0){return 0;}//既に要素を使い切っているなら、0として再帰を終える
+			if($this->isUnder($c+$tn+1)){return null;}//残り個数が最低個数に満たない
+			if($this->isOver($c+1)){return 0;}//これが個数上限なら、この先測定条件値が増加することは無い。
+			if($this->ln-$cn_k<$this->min_k){return 0;}//既にコストを使い切っているなら、0として再帰を終える
+			if($this->rule===0){
+				if(($this->ln-$cn_k)*$this->d2_b[$tn][2] < $this->z_rt-$cn_c){return null;}//残り制限条件値全てがtnの比率でも暫定最大値に足りないなら、考えなくていい
+			}else{
+				if(($this->ln-$cn_k)*$this->d2_b[$tn][2] > $this->z_rt-$cn_c){return null;}//残り制限条件値全てがtnの比率でも暫定最小値を超えるのなら、考えなくていい
+			}
+			$rt=$this->memo->read(array($cn_k,$tn,$c));
+			if($rt!==false){return $rt;}//メモに既にあるならその値を返す
+			return true;
+		}
+		//再帰に必要な数値は、現在個数cと現在制限条件値合計cn_k・現在測定条件値合計値cn_c、次にチェックする対象tn。
+		//出力値rtnは、rule0に基づく測定条件値合計値$cn_cのここから先での上昇量の限界値
+		//更新される暫定出力値は、ここまでの上昇量cn_cとここからの上昇量限界値rtnの合計値
+		//ただし、個数不足その他で打ち切った場合は返り値はfalse
+		//$tn+1～のうち$c個で制限条件値が合計$cn_k、測定条件値が合計$cn_c、の状態で、$tnを使うか使わないかで分けて再帰
+		//メモには、array($cn_k,$tn,$c)に、rtnを入れる。
+		protected function rc($c,$cn_k,$cn_c,$tn){
+
+			$ot=$this->isNotCheck($c,$cn_k,$cn_c,$tn);
+			if($ot!==true){return $ot;}//打ち切り条件を満たすならそれぞれの返り値を返す
+
+			//再帰する場合
+			$rtn1=$this->rc($c,$cn_k,$cn_c,$tn-1);//$tnを使わない場合の分岐
+			//$tnを使う場合を考慮する条件＾
+			if(!$this->isover($c+1) and $this->isSafe($cn_k+$this->d2_b[$tn][0])){
+				$rtn2=$this->rc($c+1,$cn_k+$this->d2_b[$tn][0],$cn_c+$this->d2_b[$tn][1],$tn-1);
+				if($rtn2!==false){$rtn2+=$this->d2_b[$tn][1];}
+			}else{
+				$rtn2=false;
+			}
+
+			if($this->isBetter($rtn1,$rtn2)){
+				$rtn=$rtn1;
+			}else{
+				$rtn=$rtn2;
+			}
+			if($this->isBetter($rtn+$cn_c,$this->z_rt)){$this->z_rt=$rtn+$cn_c;}//$this->z_rt=$rtnになってたのはダメなんでは。→だいぶ速くなった。暫定最大値の意味がある。
+			$this->memo->write(array($cn_k,$tn,$c),$rtn);
+			return $rtn;
+
+		}
+	}
+
+}
+namespace {
+	//テスト用
+	// $rule=0;
+	// $ln_b=20;//simple0は20くらいが限度
+	// $ln_k=20;
+	// $ln_c=20;
+	// $ln_max=100;
+	// $d1_l=array(8,12);
+	// $start=20;
+	// $loop=500;
+	// for($i1=$start;$i1<$start+$loop;$i1++){
+	// 	srand($i1);
+	// 	$d2_b=array();
+	// 	for($i2=0;$i2<$ln_b;$i2++){
+	// 		$d2_b[]=array(rand(1,$ln_k),rand(1,$ln_c));
+	// 	}
+	// 	//foreach($d2_b as $d1_fe){echo "(".$d1_fe[0].",".$d1_fe[1].") ";}
+	// 	//echo"<br>\n";
+
+	// 	// $test=new crast\knapsack\simple0\test($ln_max,$rule,$d1_l);
+	// 	// $test->d2_b=$d2_b;
+	// 	// //TimeCheck();
+	// 	// echo $i1." simple0\t\t";
+	// 	// echo $test->getReturn();
+	// 	// echo "\t";
+	// 	// TimeCheck();
+
+	// 	$test=new crast\knapsack\challenge1\test($ln_max,$rule,$d1_l);
+	// 	foreach($d2_b as $d1_fe){
+	// 		$test->push($d1_fe[0],$d1_fe[1]);
+	// 	}
+	// 	echo $i1." challenge1 test\t";
+	// 	echo $test->getReturn();
+	// 	echo "\t";
+	// 	TimeCheck();
+
+	// 	$test=new crast\knapsack\challenge1\test2($ln_max,$rule,$d1_l);
+	// 	foreach($d2_b as $d1_fe){
+	// 		$test->push($d1_fe[0],$d1_fe[1]);
+	// 	}
+	// 	echo $i1." challenge1 test2\t";
+	// 	echo $test->getReturn();
+	// 	echo "\t";
+	// 	TimeCheck();
+	
+	// 	$test=new crast\knapsack\challenge1\test3($ln_max,$rule,$d1_l);
+	// 	foreach($d2_b as $d1_fe){
+	// 		$test->push($d1_fe[0],$d1_fe[1]);
+	// 	}
+	// 	echo $i1." challenge1 test3\t";
+	// 	echo $test->getReturn();
+	// 	echo "\t";
+	// 	TimeCheck();
+	
+	// 	echo"<br>\n";
+	// }
+
+	// $rule=0;
+	// $ln_b=30;//simple0は20くらいが限度
+	// $ln_k=20;
+	// $ln_c=20;
+	// $ln_max=140;
+	// $d1_l=array(12,18);
+	// $start=20;
+	// $loop=50;
+	//の条件で、暫定最大値を組み込んだtest2を実験。
+	// 36 challenge1 test	215	time_0.026<br>
+	// 36 challenge1 test2	215	time_0.061<br>
+	//みたいに、test2が遅い場合も多少はあるものの。
+	// 35 challenge1 test	203	time_1.023<br>
+	// 35 challenge1 test2	203	time_0.001<br>	
+	//みたいに、クソ速いパターンもあり。
+	//test2は、0.1秒に届くことは一切なかった。0.01秒を割ることもそこそこあった。
+
+	// $rule=0;
+	// $ln_b=50;//simple0は20くらいが限度
+	// $ln_k=30;
+	// $ln_c=30;
+	// $ln_max=350;
+	// $d1_l=array(20,30);
+	// $start=100;
+	// $loop=5;
+	//の条件で、falseではなくnullをメモに入れるtest3を実験。
+	// 100 challenge1 test2	660	time_0.398<br>
+	// 100 challenge1 test3	660	time_0.007<br>
+	// <br>
+	// 101 challenge1 test2	503	time_0.287<br>
+	// 101 challenge1 test3	503	time_0.113<br>
+	// <br>
+	// 102 challenge1 test2	535	time_0.595<br>
+	// 102 challenge1 test3	535	time_0.108<br>
+	// <br>
+	// 103 challenge1 test2	675	time_5.604<br>
+	// 103 challenge1 test3	669	time_0.09<br>
+	// <br>
+	// 104 challenge1 test2	578	time_1.528<br>
+	// 104 challenge1 test3	578	time_0.091<br>
+	// <br>
+	//速いんだが誤答が出ている。つまり打ち切り条件のミスか……?
+	//($this->ln-$cn_k)*$this->d2_b[$tn][2] < $this->z_rt-$cn_c条件を無視すると、クソ遅くなる代わりに一致した。
+	// 100 challenge1 test2	660	time_0.387<br>
+	// 100 challenge1 test3	660	time_3.53<br>
+	// <br>
+	// 101 challenge1 test2	503	time_0.316<br>
+	// 101 challenge1 test3	503	time_84.068<br>
+	// <br>
+	// 102 challenge1 test2	535	time_0.591<br>
+	// 102 challenge1 test3	535	time_15.665<br>
+	// <br>
+	// 103 challenge1 test2	675	time_5.535<br>
+	// 103 challenge1 test3	675	time_0.446<br>
+	// <br>
+	// 104 challenge1 test2	578	time_1.528<br>
+	// 104 challenge1 test3	578	time_2.574<br>	
+	//打ち切り条件によって結果が変わるのはおかしいので、つまりここがバグっている。
+
+	// $rule=0;
+	// $ln_b=20;//simple0は20くらいが限度
+	// $ln_k=20;
+	// $ln_c=20;
+	// $ln_max=100;
+	// $d1_l=array(8,12);
+	// $start=20;
+	// $loop=500;
+	//にて123と比較したところ、20を初めとしてtest2の時点で誤答は存在していた。もっとさかのぼって調べないといけないな。
+	//まず、test1が必ずしも正しいのかどうかから疑わないといけない。
+
+
+}
+namespace {
+	//まず、正答を返せているかどうかの実験から。
+	$rule=0;
+	$ln_b=10;//simple0は20くらいが限度
+	$ln_k=10;
+	$ln_c=10;
+	$ln_max=24;
+	$d1_l=array(4,6);
+	$start=0;
+	$loop=100000;
+	for($i1=$start;$i1<$start+$loop;$i1++){
+		srand($i1);
+		$d2_b=array();
+		for($i2=0;$i2<$ln_b;$i2++){
+			$d2_b[]=array(rand(1,$ln_k),rand(1,$ln_c));
+		}
+		$answer=array();
+
+		// $test=new \crast\knapsack($d2_b,$ln_max);
+		// $answer[0]=$test->getReturn();
+
+		// $test=new crast\knapsack\simple0\test($ln_max,0,array(null,null));
+		// $test->d2_b=$d2_b;
+		// $answer[1]=$test->getReturn();
+
+		// $test=new crast\knapsack\simple0\test04_3($ln_max,0,array(null,null));
+		// foreach($d2_b as $d1_fe){
+		// 	$test->push($d1_fe[0],$d1_fe[1]);
+		// }
+		// $answer[2]=$test->getReturn();
+
+		// if($answer[0]!==$answer[1] or $answer[0]!==$answer[2]){
+		// 	echo "\n$i1 $answer[0] $answer[1] $answer[2] \n";
+		// }
+		// continue;
+
+		$test=new crast\knapsack\simple0\test($ln_max,$rule,$d1_l);
+		$test->d2_b=$d2_b;
+		$answer[0]=$test->getReturn();
+
+		$test=new crast\knapsack\simple0\test06_2($ln_max,$rule,$d1_l);
+		foreach($d2_b as $d1_fe){
+			$test->push($d1_fe[0],$d1_fe[1]);
+		}
+		$answer[1]=$test->getReturn();
+
+		// $test=new crast\knapsack\challenge1\test($ln_max,$rule,$d1_l);
+		// foreach($d2_b as $d1_fe){
+		// 	$test->push($d1_fe[0],$d1_fe[1]);
+		// }
+		// $answer[2]=$test->getReturn();
+
+		if($answer[0]!==$answer[1] 
+		//or $answer[0]!==$answer[2]
+		){
+			//for($i2=0;$i2<$ln_b;$i2++){echo "(".$d2_b[$i2][0].",".$d2_b[$i2][1].") ";}
+			echo "\n$i1 $answer[0] $answer[1] $answer[2] \n";
+		}
+
+	}
+
+	// (9,3) (4,7) (7,4) (7,8) (9,3) (8,7) (9,9) (8,5) (10,4) (7,7) 
+	// 107  24 
+	// (3,2) (10,8) (8,6) (6,7) (3,1) (7,3) (10,5) (10,8) (1,2) (10,10) 
+	// 110 22 23 
+	// (8,6) (8,8) (5,1) (6,1) (10,6) (7,5) (10,6) (5,8) (9,7) (6,4) 
+	// 142 21 23 
+	// (10,8) (6,1) (8,10) (7,10) (10,3) (5,4) (8,10) (5,3) (9,5) (3,4) 
+	// 263 28 30 
+	// (7,5) (9,5) (8,7) (9,1) (9,7) (8,10) (7,6) (10,9) (9,5) (6,10) 
+	// 298  29 
+	// (10,9) (7,9) (6,9) (5,3) (6,5) (7,8) (7,6) (9,7) (10,5) (7,6) 
+	// 347 26 27 
+	// (9,10) (8,3) (6,5) (6,1) (8,1) (10,6) (7,7) (10,6) (5,4) (7,5) 
+	// 385 17 22 
+	// (3,1) (10,10) (9,10) (6,2) (9,4) (7,1) (4,10) (6,8) (6,8) (8,1) 
+	// 389 29 30 
+	// (9,2) (5,9) (9,3) (10,10) (8,9) (7,6) (9,5) (10,3) (7,3) (5,9) 
+	// 403 27 28 
+	// (4,2) (7,10) (8,1) (5,4) (5,1) (10,8) (7,6) (9,3) (6,2) (5,1) 
+	// 437 22 24 
+	// (9,8) (9,8) (9,7) (1,3) (7,4) (7,1) (8,3) (3,4) (6,9) (9,2) 
+	// 514 24 25 	
+	//まずはシンプルからして信じられないってのはどういうことだ一体。
+	//一番小さい組み合わせでも制限条件値境界を超えるなら、出力がnullなのはいいのか。
+	//むしろ、そのはずなのに結果が出力されているchallenge1が既に駄目だ。
+	//また、110だと、(8,6) (6,7) (10,10)で23が正解のはずだ。なんで22になってる。
+	//いや、最低4つ使わないといけないから、そうはなれないのか。
+	//(3,2) (10,8) (1,2) (10,10) の22が最大値であってるのか。
+	//シンプルから、順に追加していってみる。
+	//比率順にソート→問題なし
+	//メモ化→問題あり。challenge1ともsimple0ともずれる事態が発生。
+	//readがfalseである場合を考慮していなかったせいかな……?
+	//暫定最大値設定→大丈夫。
+	//打ち切り条件：個数が既に足りない＆個数が既に最大→大丈夫。
+	//打ち切り条件：残りコスト全てがtnの比率でも無理確定→だいぶ大きくずれた。なんだこれ。
+	//challenge1の方ではずれてないのにこれだけずれるとか一体。
+	//あー、打ち切るのはいいけど、メモに入れてしまうと、もっと効率のいい組み合わせで再度来た時に確認せず打ち切ってしまうから駄目なのか。
+	//であれば、nullではなくfalseを出力してみるか。rtn2の加算部分でfalseも弾けるようにしたうえで。
+	//isBetterもmemoのcompareも、となると面倒だな。メモに入れるか確認する前に、falseは弾くか。isBetterはしゃあない。
+	//→確実に減ったけど、でもこれでのみ誤答することはまだまだある。何だろう一体。
+	//暫定限界を超えるものしか見ないせいでずれてる……?　z_rtの方を出力すればセーフなことは結構あるけど、まだ残る。
+	//比率不足での打ち切りよりもメモを優先するために、メモにあれば打ち切り、の方を先に処理した方がいい……?→減りはするけど無くならない。
+	//試しに、rtn1とrtn2の計算順を逆にして探索順を変える＝メモに入れる順を変えてみる。→独自の誤答は無くなった。けど、challenge1同様の誤答はある。ので駄目だね。
+	//根本的にダメっぽいか……。再帰関数の引数でない、z_rtによって、再帰関数の返り値が変わってはいけない、ってことなのかね。
+	//そもそも、元のナップサック用ライブラリは、正答できているのか、もちょっと疑うべきか。個数条件なしの場合で比較してみようか。
+	//→0から10000回回したところ、一か所、6137でずれた。もう何も信じられなくなってきたなあおい。
+
+	//あ、いや、待て。メモと併用しなければ、打ち切り条件はいくら増やしても大丈夫だな？　最大化する前に打ち切った結果をメモに入れてしまうのがまずいので。
+	//再帰戻り値に、最大化されているかどうかのboolを追加するか……？そうすれば、打ち切りに因る値はメモに入らない。
+	//それだと、メモが一切使われなくなるだけか。打ち切らずに最大値を確実に出していくのが、メモ式の前提か。
+	//メモ式である以上、暫定最大値による打ち切りは無理だな？また、メモリ上限考慮すると、メモの次数も増やしたくはないか。
+	//メモにも使われている、$c、$cn_k、$tnと、再帰中は固定値であるln、tln、bln辺りは使っていい。
+	//メモ式か、暫定最大値による打ち切りか、の2択だと思っていいか。再帰部分を、どっちの方が速く終えられるのか。
+	//メモ使わない方がメモリには優しいんだと思う。でも、メモ式の方が圧倒的に速い印象はあるよなあ。
+
+	//打ち切り条件追加：
+	//残り要素最低コストが残りコストを上回っているなら0リターン
+	//
+	//駄目だ、個数条件とメモだけなら誤答無しで行けるけど、コスト条件追加するとずれる。
+	//現在コストごとにメモは分かれているのだから、これで誤答するのはメモが原因ではないはずだ。
+	//一応実験もする→うん、メモだけオンオフしても、速さが変わるだけで結果は変わらず。
+	//つまり、メモに関係なく、この枝刈り条件で刈ってはいけないものを刈っている。
+	//うあ、最低値リストがおかしいというか先頭値が考慮されてない？一番比率の悪いものを使う可能性を拾えていない。
+	//あ、先頭の値をソート前に拾ってるじゃん。そりゃ駄目だよ。凡ミスぅ。
+	//修正。よし、問題なし。
+
+	//とりあえず、メモ有りとメモ無しと作ったところで、速度を見てみようか。
+
+}
+namespace {
+	// $rule=0;
+	// $ln_b=1000;//simple0は20くらいが限度
+	// $ln_k=1000;
+	// $ln_c=1000;
+	// $ln_max=300000;
+	// $d1_l=array(4000,6000);
+	// $start=650;
+	// $loop=300;
+	// for($i1=$start;$i1<$start+$loop;$i1++){
+	// 	srand($i1);
+	// 	$d2_b=array();
+	// 	for($i2=0;$i2<$ln_b;$i2++){
+	// 		$d2_b[]=array(rand(1,$ln_k),rand(1,$ln_c));
+	// 	}
+	// 	$answer=array();
+
+	// $test=new crast\knapsack\simple0\test06($ln_max,$rule,$d1_l);
+	// foreach($d2_b as $d1_fe){
+	// 	$test->push($d1_fe[0],$d1_fe[1]);
+	// }
+	// $answer[0]=$test->getReturn();
+	// timeCheck();
+
+	// 	$test=new crast\knapsack\simple0\test06_2($ln_max,$rule,$d1_l);
+	// 	foreach($d2_b as $d1_fe){
+	// 		$test->push($d1_fe[0],$d1_fe[1]);
+	// 	}
+	// 	$answer[1]=$test->getReturn();
+	// 	timeCheck();
+
+	//echo "$i1 $answer[0] $answer[1]\n\n";
+	//}
+
+	// $ln_b=30;//simple0は20くらいが限度
+	// $ln_k=100;
+	// $ln_c=100;
+	// $ln_max=750;
+	// $d1_l=array(12,18);
+	// $start=650;
+	// $loop=30;
+	//でテスト。
+	//極端なときは、
+	// time_2.833<br>
+	// time_0.001<br>
+	// 651 1115 1115
+	//レベルで差がある。3000倍はえぐいわ。
+	//成程、全探索に近いとメモ式が有利で、一部調査なら枝刈りの方が速い、と。
+	// $ln_max=1300;
+	// $d1_l=array(0,30);
+	//にしてみると、
+	// time_0.217<br>
+	// time_0.014<br>
+	// 651 1507 1507
+	//みたいなのもあるけど、
+	// time_0.234<br>
+	// time_2.894<br>
+	// 654 1546 1546
+	//みたいな状況も。メモ有りとメモ無し、どっちが有利とも一概には言えんな。
+	//ただ、メモ式は速度が安定してるっぽい。2倍は変わらない。
+	//メモ無しは枝刈りがうまくいくと一瞬で終わるんだが、遅い時はえぐい。100倍以上差が出る。
+
+	//個数条件や制限条件境界値の関係で、少ない個数の組み合わせだけ調べればいいなら、メモ無し枝刈りの方が優位っぽい。
+	//逆に、多数の組み合わせを調べるなら、メモ式で何度も再利用する方が有利、と。
+	//コストの数値範囲が広くてメモの再利用が難しかったりしても、枝刈りの方が優位かな。
+
+	//コードとしても、両方用意して、必要に応じて使い分けた方がいいのかな。
+	
+	//ただ、もうちょっと、枝刈り効率上げることは考えよう。
+	//貪欲法で作った暫定最大値がとりあえず使えるパターンは結構あるはず。
+	//rule0なら直前まで、rule1なら一旦超えるまで、とりあえず高効率なものから詰めていって、だ。
+	//その次の比率を見れば、外れる可能性のあるもの無いものに分けることはできる。
+	//絶対外れないものは、全部入れた状態で、残りの制限条件値の範囲だけ探索する、というのはありなはずだ。
+	//どう考えても外れるわけがないものを外した状態まで、わざわざ全部調査してメモに起こす意味は無いだろう。
+	//だから、再帰するより前に出来ることがあるはずで、それは暫定限界値式なら自動的に為される部分だ。
+
+	//あ、違うわ。事前に確定要素を出すんじゃなくて、再帰の分岐で使わない場合を選択するかどうかの時点でチェックだ。
+	//この場合、使う分岐に絶対劣るなら、どうせメモ確認の前に消滅するので、メモを荒らさない。
+	//なおかつ、尚早な判断を下してしまうリスクも無い。これだ。
+	//てゆーか、このタイミングなら、もっと色々枝刈りできるんと違うか……？
+	//いや、暫定最大値の代わりに$rtn2を使ってるだけだから、暫定最大値関連の枝刈りしかできないか。
+	//→ほとんど変わらないというか、1%ほど遅くなる……？
+	//いや、継承してるからだろう。べた書きの05_3でやり直し。
+	//んー、基本的に誤差で、平均すると1%早くなるかなくらいの感じっぽい？
+	//メモ式である以上、どうせ一通りは計算しないといけないのは仕方ないか。
+	//まあ、目に見えて損してるわけではなさそうなので改良されてはいる。
+
+	//メモ無し型にしても、枝刈りの方法はもっとあるはず。
+	//測定値の方もコスト同様にリストアップして、無駄なら枝刈りしよう。
+	//枝刈り時も、暫定限界値を更新できるならしておくべき。
+	//→速すぎて、
+	// $ln_max=1300;
+	// $d1_l=array(0,30);
+	//条件でも0.001秒に届かないんですがそれは。
+	// $rule=0;
+	// $ln_b=1000;//simple0は20くらいが限度
+	// $ln_k=1000;
+	// $ln_c=1000;
+	// $ln_max=300000;
+	// $d1_l=array(4000,6000);
+	// $start=650;
+	// $loop=300;
+	//というレベルでも、0.003秒で片付いている。早すぎだろおい。
+	//本当に常に正しいのかのチェックだけやって、これが最終でいいかな。
+
+
+
+}
+
+?>
