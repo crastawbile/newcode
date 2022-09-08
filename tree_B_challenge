@@ -1,0 +1,989 @@
+<?PHP
+namespace{
+	//新しいコードを試してみる場所。
+
+	set_time_limit(0);
+	function timeCheck(){
+		static $beforeCheckTime;
+		$newCheckTime=substr(str_pad(hrtime()[0],9,"0",STR_PAD_LEFT).".".str_pad(hrtime()[1],9,"0",STR_PAD_LEFT),4,9);
+		if(isset($beforeCheckTime)){
+			$echo=round($newCheckTime-$beforeCheckTime,3);
+			echo "time_$echo<br>\n";
+		}else{
+			$echo=null;
+		}
+		$beforeCheckTime=$newCheckTime;
+		return $echo;
+	}
+	function memoryCheck($now=false){
+        if($now){
+            $ot=strval(memory_get_usage());
+        }else{
+            $ot=strval(memory_get_peak_usage());
+        }
+        $echo=round($ot/(1024*1024),3);
+        echo "memory_$echo<br>\n";
+		return $echo;
+    }
+	timecheck();
+
+	//../..../..../..../..../..../..../..../..../..
+
+	//今回挑戦するのは、セグメント木。
+	//https://maspypy.com/segment-tree-%E3%81%AE%E3%81%8A%E5%8B%89%E5%BC%B71
+	//https://maspypy.com/segment-tree-%e3%81%ae%e3%81%8a%e5%8b%89%e5%bc%b72
+	//https://betrue12.hateblo.jp/entry/2020/09/22/194541
+	//ソートには対応してないけど、要素の更新と区間和(あるいは何かしらの結合法則のある演算)を
+	//双方最悪時間量logNで出来るのだとか。
+	//そこに向かって、木構造をいくつか試してみる。
+	//2-3-4木
+	//赤黒木
+	//フェニック木
+	//https://qiita.com/R_olldIce/items/f2f7930e7f67963f0493
+}
+namespace crast\tree{
+
+	//まず試してみるのはB木。
+	//https://en.wikipedia.org/wiki/B-tree
+	//https://atmarkit.itmedia.co.jp/fcoding/articles/delphi/05/delphi05a.html
+	//キーでソートされた状態でデータを蓄積。
+	//キーで値を探索、新たなデータを挿入、キーで値を削除、が出来る。
+	//改良版であるB+木、B*木と共に、今なおストレージの実装に使われている構造、らしい。
+	//まあ実際にはもっと様々な工夫や最適化が施されて複雑になっているんだろうけども。
+	//普通にやる分には配列のキーと値として保存するだけなので、ほんとに単なる勉強である。
+
+	//ツリー構造であって、ツリー作成時に、内容の比較ルールcompareと子の最大数nを定義する。
+	//全ての内容は、重複の無いキーを持ち、キーのみによって比較され、確実に順序が決まるものとする。
+	//各ノードはn-1以下の個数の内容と、内容+1個以下の子ノードを持つ。
+	//ある対象ノードのk番目の子、及びその子孫に含まれる全ての内容は、
+	//その対象ノードのk番目の内容より後に配置され、k+1番目の内容よりも先に配置されるものとなる。
+	//ルートノード以外の全てのノードは、子を持たないか、あるいはn/2以上の子を持つ。
+	//ルートノードだけは例外的に子が一つからあり得る。
+
+	//子を持たないリーフノードは、別クラスにした方がいいか。
+	//いや、リーフノードを分割した際に親からのリンクを描き変えるのが面倒なので、同じクラスの方がいいな。
+
+	//内容ノードの作成
+	class valuenode{
+		public function __construct(private $key,private $value){}
+		public function key(){return $this->key;}
+		public function value(){return $this->value;}
+	}
+
+	//ツリー構造用のノードの作成
+	class treenode_B{
+		public ?treenode_B $parent=null;//親となるtreenode
+		/** @var valuenode[]*/
+		public array $values;//valuenodeが入る
+		/** @var treenode_B[]*/
+		public array $childs;//treenodeが入る
+		public function __construct(){
+			$this->values=array();
+			$this->childs=array();
+		}
+	}
+
+	/** 
+	 * IteratorAggregateで呼び出すイテレータオブジェクト
+	*/
+	class B_itr implements \Iterator{
+		protected ?treenode_b $currentNode;
+		protected array $currentAddress;
+		protected ?int $currentPos;
+		protected ?treenode_b $nextNode;
+		protected array $nextAddress;
+		protected ?int $nextPos;
+		public function __construct(protected treenode_B $R){
+			//echo "\n new B_itr created \n\n";
+			//var_dump($this->R);
+		}
+		/**
+		 * nextの位置を次に移動させる
+		 */
+		protected function setNext(){
+			//echo "check setNext head \n";
+			//var_dump($this->nextNode);
+			//var_dump($this->nextAddress);
+			//var_dump($this->nextPos);
+			if(count($this->nextNode->childs)>0){//nextNodeがリーフノードでない場合
+				//echo"check setNext notLeaf\n";
+				//次の子ノードに降りられる場合、その子ノードの枝に属するリーフノードの左端に移動
+				if(array_key_exists($this->nextPos+1,$this->nextNode->childs)){
+					$this->nextNode=$this->nextNode->childs[$this->nextPos+1];
+					array_push($this->nextAddress,$this->nextPos+1);
+					while(count($this->nextNode->childs)>0){
+						$this->nextNode=$this->nextNode->childs[0];
+						array_push($this->nextAddress,0);
+					}
+					$this->nextPos=0;
+					//オーダー4以上を想定しているため、子ノードにvaluesがひとつもないという可能性はない。
+					return;
+				}else{//リーフノードではないが次の子ノードが無い場合
+					$this->setNextBack();
+				}
+			}else{//nextNodeがリーフノードである場合
+				//echo"check setNext isLeaf\n";
+				if(array_key_exists($this->nextPos+1,$this->nextNode->values)){
+					$this->nextPos++;
+					return;
+				}else{//リーフノードだが次のvaluesが無い場合
+					$this->setNextBack();
+				}
+			}
+			//echo "check setNext tail \n";
+			//var_dump($this->nextNode);
+			//var_dump($this->nextAddress);
+			//var_dump($this->nextPos);
+		}
+		/**
+		 * 次が存在しないために、nextNodeから親ノードに移動して、valuesに次の位置があるかどうかチェックし、無ければ更に上に向かう処理
+		 * 最終的に全ての親に突っ込む場合も考慮
+		 */
+		protected function setNextBack(){
+			//echo"check setNextBack head\n";
+			//var_dump($this->nextNode);
+			//全ての親で、子を全て見終えているなら、もう次はない
+			if($this->nextNode===$this->R){//===と間違えて=とかいう初歩的なミスを……。
+				//echo"check setNextBack isParent\n";
+				$this->nextNode=null;
+				$this->nextPos=null;
+				return;
+			}
+
+			//そうでないなら、親に移動する。
+			//echo"check setNextBack notParent\n";
+			$this->nextPos=array_pop($this->nextAddress);
+			$this->nextNode=$this->nextNode->parent;
+
+			//親に移動した結果、次のvaluesが無いなら、再帰して繰り返す
+			if(!array_key_exists($this->nextPos,$this->nextNode->values)){
+				$this->setNextback();
+			}
+		}
+		public function key():mixed{
+			return $this->currentNode->values[$this->currentPos]->key();
+		}
+		public function current():mixed{
+			return $this->currentNode->values[$this->currentPos]->value();
+		}
+		public function next():void{
+			$this->currentNode=$this->nextNode;
+			$this->currentAddress=$this->nextAddress;
+			$this->currentPos=$this->nextPos;
+			if($this->currentNode!==null){$this->setNext();}
+		}
+		public function valid():bool{
+			return $this->currentNode!==null;
+		}
+		public function rewind():void{
+			//echo"check rewind head\n";
+			//var_dump($this->R);
+			$this->currentNode=$this->R;
+			$this->currentAddress=array();
+			$this->currentPos=0;
+			if(count($this->currentNode->values)===0){//空のB木の場合の対応
+				$this->currentNode=null;
+				return;
+			}
+			//echo"check rewind do main\n";
+			//$llll=0;
+			while(count($this->currentNode->childs)>0){
+				//var_dump($this->currentNode);
+				//$llll++;
+				//if($llll>100){exit();}
+				//var_dump($this->currentNode->childs);
+				$this->currentNode=$this->currentNode->childs[0];
+				array_push($this->currentAddress,0);
+			}
+			$this->nextNode=$this->currentNode;
+			$this->nextAddress=$this->currentAddress;
+			$this->nextPos=$this->currentPos;
+			if($this->nextNode!==null){$this->setNext();}
+		}
+	}
+	//実際に呼び出されるクラス本体
+	class B_01 implements \countable,\IteratorAggregate,\ArrayAccess{
+		//protected $max;
+		public $R;
+		protected int $cn=0;//要素数。B木全体に含まれるvaluenodeの数
+		//protected $max;//オーダー。childsの最大数。childsは最低でもオーダーの半分(切り捨て)以上であることが保証される。
+		public function __construct(protected int $max=4){
+			if($this->max<4){$this->max=4;}
+			$this->R=new treenode_B();
+		}
+		public function count():int{
+			return $this->cn;
+		}
+		public function getIterator(): \Traversable{
+			return new B_itr($this->R);
+		}
+		/**
+		 * 
+		 * 指定treenodeの中に、key=$keyのvaluenodeが存在するかどうか、存在するならどこにあるか/存在しないならどこに存在しうるか、を返す。
+		 * 
+		 * @param treenode_B $target
+		 * @param int $key
+		 * 
+		 * @return array(bool $exist, int $pos) 
+		 */
+		protected function possess(treenode_B $target,int $key):array{
+			$otln=count($target->values);
+			for($i1=0;$i1<$otln;$i1++){
+				if($target->values[$i1]->key()===$key){
+					return array(true,$i1);
+				}elseif($key<$target->values[$i1]->key()){
+					return array(false,$i1);
+				}
+			}
+			return array(false,$i1);
+		}
+		/**
+		 * 
+		 * B木全体の中に、key=$keyのvaluenodeが存在するかどうか、存在するならどのtreenodeのどこにあるか/存在しないならどのtreenodeのどこに存在しうるか、を返す。
+		 * 
+		 * @param int $key
+		 * 
+		 * @return array(bool $exist, treenode_B $target, int $pos) 
+		 */
+		protected function search($key):array{
+			$target=$this->R;//全ての親ノードから開始
+			//echo "check search head ";
+			//var_dump($this->R);
+			while(true){
+				//var_dump($target);
+				list($exist,$pos)=$this->possess($target,$key);
+				if($exist){//現在のノードに該当値が存在する場合
+					return array(true,$target,$pos);//その位置を返して終了
+				}elseif(count($target->childs)>0){//現在のノードに該当値が存在しない場合
+					$target=$target->childs[$pos];//子ノードがあるなら子ノードへ移動して続行
+					continue;
+				}else{//リーフノードに到着しても該当値が見つからない場合
+					return array(false,$target,$pos);//最終位置を返して終了
+				}
+			}
+		}
+		/** 
+		 * B木全体に、key=$keyとなるvaluenodeが存在するならtrue、存在しないならfalse
+		*/
+		public function offsetExists($key):bool{
+			return $this->search($key)[0];
+		}
+		/**
+		 * B木全体から、key=$keyとなるvaluenodeのvalueを返す。存在しないならnull
+		 * 
+		 * offsetGetは参照返しできなければならない。
+		 */
+		public function &offsetGet($key):mixed{
+			list($exist,$target,$kp)=$this->search($key);
+			if($exist){
+				return $target->values[$kp]->value();
+			}else{
+				return null;
+			}
+		}
+		/** 
+		 * 新たなvaluenodeを作成し、$keyが存在するなら上書き、存在しないなら挿入する。
+		*/
+		public function offsetSet($key,$value):void{
+			$newvalue=new valuenode($key,$value);
+			list($exist,$target,$pos)=$this->search($key);
+			if($exist){
+				$target->values[$pos]=$newvalue;
+			}else{
+				$this->insertLeaf($target,$newvalue,$pos);
+				$this->cn++;
+			}
+		}
+		/**
+		 * B木全体から、key=$keyとなるvaluenodeを削除する
+		 */
+		public function offsetUnset($key):void{
+			list($exist,$target,$pos)=$this->search($key);
+			if($exist){
+				if(count($target->childs)>0){
+					$this->reduceBranch($target,$pos);
+				}else{
+					$this->reduceLeaf($target,$pos);
+				}
+				$this->cn--;
+			}
+		}
+		/**
+		 * 指定のリーフノードの指定の位置にvaluenodeを追加する。
+		 * set以外からの呼び出しが無いなら、統合してもいい。
+		 * 
+		 */
+		protected function insertLeaf(treenode_B $target,valuenode $newvalue,int $pos):void{
+			//echo"check insertLeaf head ";var_dump($target);var_dump($newvalue);var_dump($pos);
+			if(count($target->childs)>0){return;}//リーフノードでなければ終了
+
+			array_splice($target->values,$pos,0,array($newvalue));//第4引数をarrayで入れないと、各プロパティを代入される。
+			//echo"insertLeaf after "; var_dump($target);
+			$this->devideLeaf($target);
+			//echo"insertLeaf checked "; var_dump($target);
+		}
+		/**
+		 * 指定のリーフノードの指定の位置“の次”にvaluenodeとtreenodeを追加する。
+		 */
+		protected function insertBranch(treenode_B $target,int $pos,valuenode $value,treenode_B $child):void{
+			array_splice($target->values,$pos,0,array($value));//valueの方は$pos+1じゃなくて$posに挿入
+			array_splice($target->childs,$pos+1,0,array($child));
+			$child->parent=$target;
+			$this->devideBranch($target);
+		}
+		/**
+		 * 対象のリーフノードが要素数の上限を超えていれば、分割を行う処理
+		 * insertLeaf以外からの呼び出しが無いなら、統合してもいい。
+		 * 
+		 */
+		protected function devideLeaf(treenode_B $target):void{
+			if(count($target->childs)>0){return ;}//リーフノードでなければ終了
+			if(count($target->values)<$this->max){return;}//要素数が上限以内なら終了
+
+			$dp=ceil($this->max/2);//分割する中間点
+			$newnode=new treenode_b();
+			$newnode->values=array_splice($target->values,$dp);
+			$newvalue=array_pop($target->values);
+
+			if($target!==$this->R){
+				$this->insertBranch($target->parent,$this->getPos_p($target),$newvalue,$newnode);
+			}else{
+				$this->R=new treenode_B();
+				$this->R->childs[0]=$target;
+				$this->R->values[0]=$newvalue;
+				$this->R->childs[1]=$newnode;
+				$target->parent=$this->R;
+				$newnode->parent=$this->R;
+			}
+		}
+		/**
+		 * 対象のリーフノードでないtreenodeが要素数の上限を超えていれば、分割を行う処理
+		 */
+		protected function devideBranch(treenode_B $target):void{
+			//echo"check devideBranch head\n";
+			if(count($target->values)<$this->max){return;}//要素数が上限以内なら終了
+
+			//echo"check devideBranch do\n";
+			//echo $this->getPrint();
+			$dp=ceil($this->max/2);//分割する中間点
+			$newnode=new treenode_b();
+			//echo"check devideBranch var target\n";
+			//echo $this->getPrint($target);
+			//echo"check devideBranch var newnode\n";
+			//echo $this->getPrint($newnode);
+			$newnode->values=array_splice($target->values,$dp);
+			$newnode->childs=array_splice($target->childs,$dp);
+			foreach($newnode->childs as $fenode){$fenode->parent=$newnode;}//親の書き換えを忘れていた。
+			$newvalue=array_pop($target->values);
+
+			//echo"check devideBranch ready\n";
+			//echo"check devideBranch var target\n";
+			//var_dump($target);
+			//echo $this->getPrint($target);
+			//echo"check devideBranch var newnode\n";
+			//var_dump($newnode);
+			//echo $this->getPrint($newnode);
+			if($target!==$this->R){
+				$this->insertBranch($target->parent,$this->getPos_p($target),$newvalue,$newnode);
+			}else{
+				$this->R=new treenode_B();
+				$this->R->childs[0]=$target;
+				$this->R->values[0]=$newvalue;
+				$this->R->childs[1]=$newnode;
+				$target->parent=$this->R;
+				$newnode->parent=$this->R;
+			}
+			//echo"check devideBranch tail\n";
+			//echo $this->getPrint();
+
+		}
+		protected function reduceLeaf(treenode_B $target,int $pos):void{
+			//echo"check reduceLeaf head $pos\n";
+			//var_dump($this);
+			//echo $this->getPrint();
+
+			array_splice($target->values,$pos,1);
+
+			//echo"check reduceLeaf ready\n";
+			// var_dump($target->values);
+			if(count($target->values)>=floor($this->max/2)-1){return;}//要素数が足りていればこの時点で終了
+			if($target===$this->R){return;}//対象が全ての親であれば、要素数が足りなくても構わない
+
+			//echo"check reduceLeaf do main\n";
+			$pos_p=$this->getPos_p($target);
+			if($pos_p!==0){//対象リーフノードが一番左の子でないならば、左を見て、余裕があれば右端を奪う、無ければ統合する。
+				//echo"to right\n";
+				if(count($target->parent->childs[$pos_p-1]->values)>floor($this->max/2)-1){
+					//echo"slide\n";
+					array_unshift($target->values,$target->parent->values[$pos_p-1]);
+					$target->parent->values[$pos_p-1]=array_pop($target->parent->childs[$pos_p-1]->values);
+				}else{
+					//echo"merge\n";
+					array_push($target->parent->childs[$pos_p-1]->values , $target->parent->values[$pos_p-1] , ...$target->values);
+					array_splice($target->parent->values,$pos_p-1,1);
+					array_splice($target->parent->childs,$pos_p,1);
+					$this->rebalance($target->parent);//reduceLeafにもrebalanceは必要だ。
+				}
+			}else{//一番左の子であれば、右側を見る。全ての親ではないので、子が一つだけということはない。
+				//echo"to left\n";
+				$right=$target->parent->childs[$pos_p+1];
+				if(count($right->values)>floor($this->max/2)-1){
+					//echo"slide\n";
+					array_push($target->values,$target->parent->values[$pos_p]);//親のvaluesをすっ飛ばしてリーフノード間で移動させてた。そりゃ順番おかしくなるわ。
+					$target->parent->values[$pos_p]=array_shift($right->values);
+				}else{
+					//echo"merge\n";
+					array_push($target->values , $target->parent->values[$pos_p] , ...$right->values);
+					array_splice($target->parent->values,$pos_p,1);
+					array_splice($target->parent->childs,$pos_p+1,1);
+					$this->rebalance($target->parent);
+				}
+			}
+			//echo"check reduceleaf tail\n";
+			//echo $this->getPrint();
+			// echo "\n";
+			// echo $this->getPrint($target);
+		}
+		protected function reduceBranch(treenode_B $target,int $pos):void{
+			//echo"check reduceBranch head $pos\n";
+			//var_dump($this);
+			//echo $this->getPrint();
+
+			if(count($target->childs[0]->childs)===0){//子がリーフノードである場合
+				//echo"is leaf\n";
+				//左右の子の内、valuesに余裕のある方からひとつ持ってきて埋める。どっちも余裕が無いなら、合わせて一個のリーフノードにする。
+				if(count($target->childs[$pos]->values)>floor($this->max/2)-1){//ここは同値じゃだめだ。
+					//echo"from left\n";
+					$target->values[$pos]=array_pop($target->childs[$pos]->values);
+				}elseif(count($target->childs[$pos+1]->values)>floor($this->max/2)-1){
+					//echo"from right\n";
+					$target->values[$pos]=array_shift($target->childs[$pos+1]->values);//$posに+1が抜けてた。
+				}else{
+					//echo"merge\n";
+					$target->childs[$pos]->values=array_merge($target->childs[$pos]->values,$target->childs[$pos+1]->values);
+					array_splice($target->values,$pos,1);
+					array_splice($target->childs,$pos+1,1);
+
+					$this->rebalance($target);//リーフノードを合成した結果、対象の子が最低数を割ったら、リバランス。//なぜか対象の親にリバランスしてた。
+				}
+			}else{//子がリーフノードでない場合
+				//echo"not leaf\n";
+				//左の子をルートとする部分木の右端リーフノードの右端を奪って充填。その後、そのリーフノードにreduceLeafを実行
+				list(,$rightNode)=$this->getBothEnds($target->childs[$pos]);
+				$pos_t=count($rightNode->values)-1;//-1忘れてた
+				$target->values[$pos]=$rightNode->values[$pos_t];
+				$this->reduceLeaf($rightNode,$pos_t);
+			}
+			//echo"check reduceBranch tail\n";
+			//echo $this->getPrint();
+		}
+		/**
+		 * $targetをルートとする部分木の末端となるリーフノードの内、両端を返す。
+		 * 
+		 * @return treenode_B[] 0:左端、1:右端
+		 */
+		protected function getBothEnds(treenode_b $target):array{
+			$rightNode=$target;
+			while(count($rightNode->childs)!==0){//移動した枝の右端のリーフノードを探す
+				$rightNode=$rightNode->childs[count($rightNode->childs)-1];
+			}
+			$leftNode=$target;
+			while(count($leftNode->childs)!==0){//移動した枝の左端のリーフノードを探す
+				$leftNode=$leftNode->childs[0];
+			}
+			return array($leftNode,$rightNode);
+		}
+		/**
+		 * 対象treenodeがchildsひとつvalues無しの状態から、B木の状態に戻す
+		 * 
+		 * reduceBranchからのみの呼び出しであるため、対象treenodeが全ての親でない限り、兄弟ノードが存在すること、
+		 * 対象treenodeの子ノードは最大近い要素数であり、ひとつ減らしても大丈夫であること、を前提とする。
+		 * →reduceLeafからも呼び出す必要あるので、その辺りの保証はなくなった。
+		 * max4とも限らないので、色々と条件を見直す必要がある。
+		 * 最低でもmax4である以上、全ての親以外は、childが複数あるのは確定か。
+		 * 
+		 */
+		protected function rebalance(treenode_B $target):void{
+			//echo"check rebalance head\n";
+			//var_dump($this);
+			//echo $this->getPrint();
+
+			if(count($target->childs)>=floor($this->max/2)){return;}//要素数が最低値を割り込んでいなければ、何もしない
+
+			if($target===$this->R){//対象treenodeが全ての親であれば、
+				if(count($target->childs)>1){return;}//childs=1でない限り放置でいい。
+				//childs=1であれば、対象treenodeの子を全ての親に設定し直す。
+				$this->R=$target->childs[0];
+				$this->R->parent=null;
+				return;
+			}
+
+			//以降、対象treenodeは全ての親ではない。
+
+			if(count($target->parent->childs)===1){//childsが1個になり得るのは、全ての親のみ。
+				//childs=1であれば、対象treenodeを全ての親に設定し直す。
+				$this->R=$target;
+				$this->R->parent=null;
+				return;
+			}
+
+			//以降、対象treenodeには兄弟がある。
+
+			$pos_p=$this->getPos_p($target);
+			if($pos_p!==0){//左端でないなら、左の兄弟を見る。
+				$left=$target->parent->childs[$pos_p-1];
+				if(count($left->childs)>floor($this->max/2)){//要素数に余裕が有るならひとつもらう。
+					$this->slideBranch($target,false);
+				}else{//余裕が無いなら統合してひとつのtreenodeにする。
+					$this->unionBranch($left);
+				}
+			}else{//左端なら、右側の兄弟を見る。
+				if(count($target->parent->childs[1]->childs)>floor($this->max/2)){//要素数に余裕が有るならひとつもらう。
+					$this->slideBranch($target,true);
+				}else{//余裕が無いなら統合してひとつのtreenodeにする。
+					$this->unionBranch($target);
+				}
+			}
+		}
+		/**
+		 * targetに、隣から一つ移動させる。
+		 * 移動元のtreenodeは存在するのを前提とする。
+		 */
+		protected function slideBranch(treenode_B $target,bool $rightToLeft):void{
+			//echo"check slideBranch head\n";
+			//var_dump($this);
+			//echo $this->getPrint();
+
+			$pos_p=$this->getPos_p($target);
+			if($rightToLeft){
+				$from=$target->parent->childs[$pos_p+1];
+				array_push($target->values,$target->parent->values[$pos_p]);
+				$target->parent->values[$pos_p]=array_shift($from->values);
+				$slideChild=array_shift($from->childs);
+				$slideChild->parent=$target;
+				array_push($target->childs,$slideChild);
+			}else{
+				$from=$target->parent->childs[$pos_p-1];
+				array_unshift($target->values,$target->parent->values[$pos_p-1]);//$pos_pの-1忘れ。
+				$target->parent->values[$pos_p-1]=array_pop($from->values);
+				$slideChild=array_pop($from->childs);
+				$slideChild->parent=$target;
+				array_unshift($target->childs,$slideChild);
+			}
+			// $slideChild->parent=$target;
+			// list($leftNode,$rightNode)=$this->getBothEnds($slideChild);
+
+			// echo"check slideBranch ready\n";
+			// //var_dump($this);
+			// echo $this->getPrint();
+
+			// if($rightToLeft){
+			// 	array_push($target->childs,$leftNode->values[0]);
+			// 	//ここまでで、$targetのvaluesとchildsの数は正規化。
+			// 	//移動した、leftNodeの左端valueの削除と、余っているextraValueの挿入を行って、完了。
+			// 	$insertPos=count($rightNode->values);
+			// 	$this->reduceLeaf($leftNode,0);
+			// 	$this->insertLeaf($rightNode,$extraValue,$insertPos);
+			// }else{
+			// 	array_unshift($target->childs,$rightNode->values[count($rightNode->values)-1]);
+			// 	//ここまでで、$targetのvaluesとchildsの数は正規化。
+			// 	//移動した、rightNodeの右端valueの削除と、余っているextraValueの挿入を行って、完了。
+			// 	$reducePos=count($rightNode->values)-1;
+			// 	$this->reduceLeaf($rightNode,$reducePos);
+			// 	$this->insertLeaf($leftNode,$extraValue,0);
+			// }
+		}
+		/**
+		 * 対象treenodeを、右隣のtreenodeと統合する。
+		 * 右隣のtreenodeは存在する前提とする。
+		 */
+		protected function unionBranch(treenode_B $target){
+			// echo"check unionBranch head\n";
+			// echo $this->getPrint();
+			// echo $this->getPrint($target);
+			// var_dump($target);
+			$pos_p=$this->getPos_p($target);
+			$right=$target->parent->childs[$pos_p+1];
+			array_push($target->values,...array_splice($target->parent->values,$pos_p,1));//spliceの返り値も配列だから、アンパック必要だった。
+			array_push($target->values,...$right->values);//アンパックが必要だった。
+			array_push($target->childs,...$right->childs);
+			// var_dump($target);
+			foreach($target->childs as $feobj){
+				$feobj->parent=$target;
+			}
+			array_splice($target->parent->childs,$pos_p+1,1);
+			$this->rebalance($target->parent);//リーフノードを合成した結果、対象の親の子が最低数を割ったら、リバランス。
+			// echo"check unionBranch tail\n";
+}
+		/**
+		 * 対象treenodeが、親ノードの何番目の子であるかを返す。
+		 * 対象treenodeが全ての親であればnull
+		 */
+		protected function getPos_p(treenode_B $target):int|null{
+			if($target===$this->R){return null;}
+			for($i1=0;$i1<count($target->parent->childs);$i1++){
+				if($target->parent->childs[$i1]===$target){return $i1;}
+			}
+		}
+		public static function _ct_TESTCODE_01(int $seed,int $range){
+			echo "$seed,$range\n";
+			srand($seed);
+			$checker=array();
+			$testobj=new self;
+			var_dump($testobj->R);
+			for($i1=0;$i1<$range;$i1++){
+				$rn=rand(1,100);
+				$checker[$i1]=$rn;
+				$testobj->offsetSet($i1,$rn);
+			}
+			for($i1=0;$i1<$range;$i1++){
+				echo $checker[$i1].",";
+				echo $testobj->offsetGet($i1)."\n";
+			}
+			var_dump($testobj->R->values);
+			var_dump($testobj->R->childs);
+
+		}
+		public static function isSameArray(array $d1_a,\arrayaccess $d1_b):bool{
+			$d1_av=array();
+			foreach($d1_a as $key=>$value){
+				//echo "$key,$value\n";
+				$d1_av[]=array($key,$value);
+			}
+			$d1_bv=array();
+			foreach($d1_b as $key=>$value){
+				//echo "$key,$value\n";
+				$d1_bv[]=array($key,$value);
+			}
+			if($d1_av===$d1_bv){return true;}
+			var_dump($d1_av);
+			var_dump($d1_bv);
+			return false;
+		}
+		/**
+		 * arrayaccessで書き込めるかどうか、iteratorはちゃんと使えているかどうか
+		 */
+		public static function _ct_TESTCODE_02(int $seed,int $range,int $take){
+			//echo "$seed,$range\n";
+			srand($seed);
+			$checker=array();
+			$testobj=new self;
+			for($i1=0;$i1<$take;$i1++){
+				$r_key=rand(1,$range);
+				$r_value=rand(1,$range*10);
+				$checker[$r_key]=$r_value;
+				$testobj[$r_key]=$r_value;
+				ksort($checker);
+				//echo"each check\n";
+				//var_dump($checker);
+				//var_dump($testobj);
+				//echo $testobj->getPrint();
+			}
+			ksort($checker);//ソート忘れ
+			//var_dump($testobj->R->values);
+			//foreach($testobj->R->childs as $child){var_dump($child->values);}
+			//echo"check childs\n";
+			//var_dump($testobj->R->childs);
+			//echo"samecheck\n";
+			if(!self::isSameArray($checker,$testobj)){
+				echo "fail ".$seed."\n\n";
+			}
+		}
+		/**
+		 * currentNodeの位置を次に移動させる
+		 */
+		protected function getPrint_setNext(treenode_B $currentNode,array $currentAddress,int $currentPos):array{
+			if(count($currentNode->childs)>0){//currentNodeがリーフノードでない場合
+				// echo"it's a not leaf\n";
+				if(array_key_exists($currentPos+1,$currentNode->childs)){
+					$currentNode=$currentNode->childs[$currentPos+1];
+					array_push($currentAddress,$currentPos+1);
+					while(count($currentNode->childs)>0){
+						$currentNode=$currentNode->childs[0];
+						array_push($currentAddress,0);
+					}
+					$currentPos=0;
+					return array($currentNode,$currentAddress,$currentPos);
+					//オーダー4以上を想定しているため、子ノードにvaluesがひとつもないという可能性はない。
+				}else{//リーフノードではないが次の子ノードが無い場合
+					return $this->getPrint_setNextBack($currentNode,$currentAddress,$currentPos);
+				}
+			}else{//nextNodeがリーフノードである場合
+				// echo"it's a leaf\n";
+				if(array_key_exists($currentPos+1,$currentNode->values)){
+					$currentPos++;
+					return array($currentNode,$currentAddress,$currentPos);
+				}else{//リーフノードだが次のvaluesが無い場合
+					//var_dump($currentNode);
+					return $this->getPrint_setNextBack($currentNode,$currentAddress,$currentPos);
+				}
+			}
+
+		}
+		/**
+		 * 次が存在しないために、currentNodeから親ノードに移動して、valuesに次の位置があるかどうかチェックし、無ければ更に上に向かう処理
+		 * 最終的に全ての親に突っ込む場合も考慮
+		 */
+		protected function getPrint_setNextBack(treenode_B $currentNode,array $currentAddress,int $currentPos):array{
+			// echo"check getPrint_setNextBack head\n";
+			// var_dump($currentNode);
+			// var_dump($currentAddress);
+			// var_dump($currentPos);
+			// //全ての親で、子を全て見終えているなら、もう次はない
+			// if($currentNode===$this->R){
+			// 	return array(null,array(),null);
+			// }
+			//部分木の場合でも通用する条件に変更。
+			if(count($currentAddress)===0 and !array_key_exists($currentPos+1,$currentNode->values)){
+				return array(null,array(),null);
+			}
+
+			// echo"check getPrint_setNextBack do\n";
+			//そうでないなら、親に移動する。
+			$currentPos=array_pop($currentAddress);
+			$currentNode=$currentNode->parent;
+
+			//親に移動した結果、次のvaluesが無いなら、再帰して繰り返す
+			if(!array_key_exists($currentPos,$currentNode->values)){
+				return $this->getPrint_setNextback($currentNode,$currentAddress,$currentPos);
+			}else{
+				return array($currentNode,$currentAddress,$currentPos);
+			}
+			
+
+		}
+		public function getPrint(?treenode_B $currentNode=null){
+			$OUTPUT="";
+			if($currentNode===null){
+				$currentNode=$this->R;
+			}
+			$currentAddress=array();
+			$currentPos=0;
+			while(count($currentNode->childs)>0){
+				$currentNode=$currentNode->childs[0];
+				array_push($currentAddress,0);
+			}
+			while($currentNode!==null){
+				if(count($currentAddress)===0 and !array_key_exists($currentPos,$currentNode->values)){break;}//部分木用の終了条件
+
+				for($i1=0;$i1<count($currentAddress);$i1++){$OUTPUT.=" ";}
+				//var_dump($currentNode);
+				//if($currentNode->parent!==null){$OUTPUT.=$currentNode->parent->values[0]->key()." ";}//親ノードの情報を入れてみる
+				if($currentNode->values[$currentPos]!==null){//values0の状態にも対応とする。
+					$OUTPUT.="(".$currentNode->values[$currentPos]->key().",".$currentNode->values[$currentPos]->value().")\n";
+				}
+				list($currentNode,$currentAddress,$currentPos)=$this->getPrint_setNext($currentNode,$currentAddress,$currentPos);	
+			}
+			return $OUTPUT;
+		}
+		/**
+		 * offsetUnsetは機能しているかどうか
+		 */
+		public static function _ct_TESTCODE_03(int $seed,int $range,int $take,int $cut){
+			srand($seed);
+			$checker=array();
+			$testobj=new self;
+			for($i1=0;$i1<$take;$i1++){
+				$r_key=rand(1,$range);
+				$r_value=rand(1,$range*10);
+				$checker[$r_key]=$r_value;
+				$testobj[$r_key]=$r_value;
+			}
+			ksort($checker);
+			self::checkSameArray($checker,$testobj,$seed);
+			//var_dump($testobj);
+			//echo $testobj->getPrint();
+			for($i1=0;$i1<$cut;$i1++){
+				$r_key=rand(1,$range);
+				//echo"cut $r_key\n";
+				unset($checker[$r_key]);
+				unset($testobj[$r_key]);
+				//var_dump($testobj);
+				//echo $testobj->getPrint();
+				self::checkSameArray($checker,$testobj,$seed);
+			}
+
+		}
+		protected static function checkSameArray(array $checker,\arrayaccess $testobj,int $seed):void{
+			if(!self::isSameArray($checker,$testobj)){
+				echo "fail ".$seed."\n\n";
+				var_dump($checker);
+				var_dump($testobj);
+			}
+		}
+		/**
+		 * 追加と削除をランダムに突っ込んでも正しく機能するかどうか
+		 * 
+		 */
+		public static function _ct_TESTCODE_04(int $seed,int $range,int $take){
+			srand($seed);
+			$checker=array();
+			$testobj=new self;
+			for($i1=0;$i1<$take;$i1++){
+				$mode=rand(0,1);
+				$r_key=rand(1,$range);
+				$r_value=rand(1,$range*10);
+				if($mode===0){
+					//echo"set $r_key\n";
+					$checker[$r_key]=$r_value;
+					$testobj[$r_key]=$r_value;
+				}else{
+					//echo"del $r_key\n";
+					unset($checker[$r_key]);
+					unset($testobj[$r_key]);
+				}
+				//echo $testobj->getPrint();
+			}
+			ksort($checker);
+			self::checkSameArray($checker,$testobj,$seed);
+			//var_dump($testobj);
+			//echo $testobj->getPrint();
+		}
+		public static function _ct_TESTCODE_0(int $seed,int $range){
+		}
+	}
+
+	//***************************************
+	//testcode
+	//***************************************
+	//途中で、テストコードをクラス本体内部に作るんじゃなく、対象クラスの子クラスとしてテストクラスを作った方が良かったのではと思い始めるなど。
+	//メソッドごとにテストコードを作って確実に、ってのも考えるけど、テスト用のオブジェクトを用意するのがめんどくさいというかなんというか。
+	//業務レベルならそこまでやらないとだろうけどなー。
+
+
+	//B_01::_ct_TESTCODE_01(0,10);
+	//プロパティ名を途中で変えたのが反映されていなかったのを修正。
+	//array_spliceの第4引数にオブジェクトを入れる場合、arrayに入れておかないと各プロパティを代入されてしまうミス
+	//クリア。
+	//B_01::_ct_TESTCODE_02(0,4,12);
+	//B_itr::currentAddressをarray()で初期化するのを忘れていた。
+	//B_itrの各プロパティをnull許容するのを忘れていた。(validの都合でnullを代入する必要がある)
+	//B_itrのコンストラクタでsetNextを呼び出す際、空のB木を投入された際のnullチェックを忘れていた。
+	//B_itr::setNextBackの、全ての親ノードか否かのチェックが、なぜか先頭ではなく後半にあった。
+	//B_itr::__construct内、whileの内側で更新する変数の綴りをミスっていて更新されないまま無限ループしていた。
+	//B_itr::setNextにおいて、子ノードに下りただけで止まっていた。その枝の左端＝リーフノードまで下りる必要がある。
+	//B_itr::rewindを__constructから分離
+	//B_itr::setNextBackの最初のif文の条件が===ではなく=になっていた。
+	//B_01::_ct_TESTCODE_02において、$checkerをksortしていなかった。(ランダム挿入で作っているので、キーの順番は不定)
+	//クリア。
+	//B_01::_ct_TESTCODE_02(5,10,30);
+	//明確にB木の構造がぶっこわれている。
+	//devideして上のtreenodeのvaluesに追加する際に、追加する位置が+1ズレている。
+	//→B::insertBranchの該当箇所を修正
+	//クリア。
+	//B_01::_ct_TESTCODE_02(97,10,30);
+	//devideが連鎖した際に、親の親の子を構成するノードを間違えて一部の要素が消失している。
+	//新たな全ての親の、下の子の下の子が、上の子の下の子と同じになっている。
+	//B::devideBranchで、childsを分割した際に、各treenodeの親を書き換えるのを忘れていた。修正。
+	//同様のミスが他にもないか、childsで検索してチェック。
+	//rebalanceの終盤がおかしい気がしたので、slideBranchとunionBranchを新規作成して分離。
+	//B::getPrint_setNextBackにおいて、部分木の場合の終了条件を用意していなかったので修正。部分木の根を通過してしまってバグっていた。
+	//クリア。
+	// for($i1=0;$i1<10000;$i1++){
+	// 	B_01::_ct_TESTCODE_02($i1,10,30);
+	// }
+	//クリア。
+	// for($i1=0;$i1<10000;$i1++){
+	// 	B_01::_ct_TESTCODE_02($i1,100,500);
+	// }
+	//クリア。
+	//B_01::_ct_TESTCODE_03(0,5,15,3);
+	//エラー自体は、B_itrのcurrent・keyがnullを参照している、というものだけだけど。
+	//nullnullのvaluenodeが出来ているのはなんでだ。そこ以外に問題はなさげではあるけど。
+	//とりあえず、後顧の憂いを立つべく、valuenodeのkeyとvalueをprivateにして、key()とvalue()で読みだすようにして見る。
+	//これで、おかしい値でnewする以外に値がおかしくなることはなくなる。
+	//B\itrのcurrent・key、getPrint、offsetGet、以外で、参照する必要は無いはず。増してや、書き換える必要はどこにもないはず。
+	//あ、possessもkey読む必要はあるか。
+	//おや、リーフノードのvaluesが0個になった時の処理を忘れている……？
+	//そんなこと無いよな、reduceLeafのメイン処理だ。
+	//あ、隣のリーフノードから直接移動させたら駄目だよ。隣のリーフノードから親のvaluesに移動させて、浮いたvaluenodeを貰わないと。
+	//reduceBranchも同様、とはいえもっと大規模に変更が必要か。
+	//部分木の左右端のリーフノードを返す処理は共通化した方が良さげ。getBothEndsを作成。
+	//クリア。
+	// for($i1=0;$i1<1000;$i1){//forの条件3つ目に++つけ忘れてるとかアホか……？
+	// 	B_01::_ct_TESTCODE_03($i1,10,30,7);
+	// }
+	//B::reduceBranchで、右から取ってくる場合に$posに+1するのを忘れていた。コピペミスだと思う。修正。
+	//B::reduceBranchで、valuesの数が足りているかどうかの条件が、>ではなく>=になっていた。修正。
+	//アウトオブメモリ。なんでだ。
+	//まだrebalanceには入らないはずだし、実際止めても変わらず。イテレータが無限ループするのかこれ。
+	//一旦シード値を制限して実験。
+	//B_01::_ct_TESTCODE_03(2,10,30,7);
+	//rebalance(NULL)……？なんでそんなことが。
+	//あ、なんか対象の親をrebalanceしてるけど、対象の子をmergeするんだから、対象をrebalanceでいいやな。修正。
+	//クリア。
+	//B_01::_ct_TESTCODE_03(97,10,30,7);
+	//unionBranchの内部で、foreachで回すtarget->childsの要素が、arrayになっているとな？
+	//あれ、array_push()の第二引数って配列型そのままはダメだっけ……？
+	//あ、完全に駄目だ。...でアンパックするのが必須だ。修正。
+	//なんかvaluesにも配列が入っている……？array_push()で複数追加する場所は他にない。array_unshift()も複数追加はしてない。
+	//array_mergeならアンパックは不要だ。どこで混入した……？
+	//あ、spliceで取り出すと、ひとつだけでも配列になるのを忘れてるやつか。単独追加でもアンパックしておく。[0]でもいいんだが。
+	//クリア。
+	//B_01::_ct_TESTCODE_03(335,10,30,7);
+	//valuesにnullが入っているとな。
+	//いきなり全ての親を切り取るとおかしくなる、というか、valuesが減らされただけで処理が止まってるような。
+	//arrayの右端を取ってくるのに、countから-1するのを忘れていた。修正。
+	//クリア。
+	//B_01::_ct_TESTCODE_03(676,10,30,7);
+	//reduceLeafの$right->valuesがnullとな。
+	//相変わらず、いきなりすべての親を切った時の挙動がおかしいっぽい。
+	//よく考えると、reduceLeafにもmergeした場合はrebalanceが必要だ。とはいえ、前提変わるよなこれ。
+	//えーと、getPrintが、values0childs1の場合に対応していない方が問題か。デバッグ用に途中状態表示するなら必要な機能だ。
+	//あ、slideBranchが全体的におかしい。隣のvalueを親に、親のvalueを対象のvaluesに移動させて、その分childsのひとつをそのまま移動させられる。
+	//getBothEndsする必要ないやん。
+	//あれ、getPrintでは確認できない形で、木構造が崩れてるっぽい。var_dumpして読み解かないと無理だこれ。
+	//あ、slideBranch修正した時に、parent訂正するのを忘れてるか。
+	//クリア。
+	// for($i1=0;$i1<10000;$i1++){
+	// 	B_01::_ct_TESTCODE_03($i1,10,30,7);
+	// }
+	//クリア。
+	// for($i1=0;$i1<10000;$i1++){
+	// 	B_01::_ct_TESTCODE_03(rand(1,10000000),10,30,7);
+	// }
+	//クリア。
+	//取り合えず、基本機能は大丈夫っぽい。
+	//どこまで行っても、凡ミスばっかだなあ。
+	//単純に、あるノードをあるノードのこの位置に移動させる、の基本処理をメソッド化するべきだったかもしれん。
+	//親の変更忘れとかは、それで防げただろうし。
+	//開発版では、交換性と整備性を高めておくのが重要よな。実装版では、速度優先で、ほとんど書き下すだろうけど。
+	//  for($i1=0;$i1<10000;$i1++){
+	// 	B_01::_ct_TESTCODE_04(0,100,300);
+	// }
+	//クリア。
+	// for($i1=0;$i1<10000;$i1++){
+	// 	B_01::_ct_TESTCODE_04(rand(1,10000000),100,300);
+	// }
+	//え、searchから呼ばれたpossessにnullが送られる、ということは、childsに下りて行った先がnull、もしくは、childsに指定のキーが無くてnull。
+	//あ、ある程度大きくした後に完全に空にするとどうなるのか、確認できてなかったか。そっちを先に確認しておこう。
+	//B_01::_ct_TESTCODE_03(0,10,30,20);
+	//B_itrが、空のB木を想定していないな。
+	//B_itr::rewindに、count(R->values)=0の時の条件を追加。
+	// for($i1=0;$i1<10000;$i1++){
+	// 	B_01::_ct_TESTCODE_03(rand(1,10000000),10,30,20);
+	// }
+	//クリア。これで大丈夫かな……？
+	// for($i1=0;$i1<10000;$i1++){
+	// 	B_01::_ct_TESTCODE_04(rand(1,10000000),20,60);
+	// }
+	//なんで、10,30だとセーフで、100,300だとアウトなんだろ……？
+	//B_01::_ct_TESTCODE_04(8955871, 20, 60);
+	//B_01::slideBranchのrighttoleft===false条件で、$pos_p-1の-1を忘れていた。コピペミスだな……。
+	//そこそこ複雑に動かさないと見えない部分だったのかな。
+	//クリア。
+	// for($i1=0;$i1<10000;$i1++){
+	// 	B_01::_ct_TESTCODE_04(rand(1,10000000),100,300);
+	// }
+	//クリア。
+	//少々無駄は多いにしても、一応の完成と見ていいか。実際に使うことはないだろうしな……。
+
+
+
+	echo"end test\n";
+
+}
+
+
+
+?>
