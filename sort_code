@@ -93,6 +93,18 @@ class c_sort {
 			}
 		}
 	}
+	public static function sort_multi($d2_t,$d2_k){//安定ソートを、複数のキーに対して連続で行う処理を簡潔に書く用。
+		while(count($d2_k)>0){
+			$d1_ot=array_pop($d2_k);
+			if(is_array($d1_ot)){
+			    $otobj=new self(...$d1_ot);
+			}else{
+			    $otobj=new self($d1_ot);
+			}
+			$d2_t=$otobj->sort($d2_t);
+		}
+		return $d2_t;
+	}
 }
 function c_sort($d2_t,$kp,$rule1=0,$rule2=0){
   $obj=new c_sort($kp,$rule1,$rule2);
