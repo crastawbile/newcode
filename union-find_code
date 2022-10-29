@@ -25,13 +25,13 @@ class ufTree{
 			return $this->d1_p[$tn];
 		}
 	}
-	public function isSame($ar){
-		if($this->d1_p[$ar[0]]==$this->d1_p[$ar[1]]){return true;}
-		return $this->findRoot($ar[0])==$this->findRoot($ar[1]);
+	public function isSame($t1,$t2){
+		if($this->d1_p[$t1]==$this->d1_p[$t2]){return true;}
+		return $this->findRoot($t1)==$this->findRoot($t2);
 	}
-	public function unite($ar){
-		$rn1=$this->findRoot($ar[0]);
-		$rn2=$this->findRoot($ar[1]);
+	public function unite($t1,$t2){
+		$rn1=$this->findRoot($t1);
+		$rn2=$this->findRoot($t2);
 		if($rn1==$rn2){return;}
 
 		if($this->d1_r[$rn1]<$this->d1_r[$rn2]){
@@ -44,6 +44,18 @@ class ufTree{
 			}
 		}
 	}
+	//強制的にt2をt1のグループに入れる処理。
+    public function obey($t1,$t2){
+		$rn1=$this->findRoot($t1);
+		$rn2=$this->findRoot($t2);
+		if($rn1==$rn2){return;}
+		$this->d1_p[$rn2]=$rn1;
+
+		if($this->d1_r[$rn1]<=$this->d1_r[$rn2]){
+		    $this->d1_r[$rn1]=$this->d1_r[$rn2]+1;
+		}
+    }
+
 	public function printList(){
 		print_r($this->d1_p);
 	} 
