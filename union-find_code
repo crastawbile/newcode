@@ -1,15 +1,19 @@
-class ufTree{
-	private $d1_p;//接続先一覧
-	private $d1_r;//ランク一覧
+//2023/11/03 グループ数を保持するプロパティcnを追加、それに伴ってcountableになった。
+//機能が増えすぎるようならシンプル版と分けるけど、現状それほどでもないと思う。
+class ufTree implements countable{
+	private $d1_p=array();//接続先一覧
+	private $d1_r=array();//ランク一覧
+	private $cn;//グループ数
 	public function __construct(int|array $something,int $start=0){
 		if(is_int($something)){
-			$this->d1_p=array();
+		    $this->cn=$something;
 			for($i1=$start;$i1<$something+$start;$i1++){
 				$this->d1_p[$i1]=$i1;
 			}
 			$this->d1_r=array_fill($start,$something,0);
 		}
 		elseif(is_array($something)){
+		    $this->cn=count($something);
 			foreach($something as $fen){
 				$this->d1_p[$fen]=$fen;
 				$this->d1_r[$fen]=0;
@@ -36,9 +40,11 @@ class ufTree{
 
 		if($this->d1_r[$rn1]<$this->d1_r[$rn2]){
 			$this->d1_p[$rn1]=$rn2;
+			$this->cn--;
 		}
 		else{
 			$this->d1_p[$rn2]=$rn1;
+			$this->cn--;
 			if($this->d1_r[$rn1]==$this->d1_r[$rn2]){
 				$this->d1_r[$rn1]++;
 			}
@@ -50,14 +56,17 @@ class ufTree{
 		$rn2=$this->findRoot($t2);
 		if($rn1==$rn2){return;}
 		$this->d1_p[$rn2]=$rn1;
+		$this->cn--;
 
 		if($this->d1_r[$rn1]<=$this->d1_r[$rn2]){
 		    $this->d1_r[$rn1]=$this->d1_r[$rn2]+1;
 		}
     }
-
+    public function count():int{
+        return $this->cn;
+    }
 	public function printList(){
 		print_r($this->d1_p);
 	} 
-}    
+}  
 
